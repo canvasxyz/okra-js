@@ -2,16 +2,16 @@ import { blake3 } from "@noble/hashes/blake3"
 
 import { Key, Node } from "./schema.js"
 
-// export const K = 16
-// export const Q = 32
 export const K = 16
-export const Q = 4
+export const Q = 32
 
-export const leafAnchorHash = blake3(new Uint8Array([]), { dkLen: K })
+export const getLeafAnchorHash = (options: { K?: number }) => blake3(new Uint8Array([]), { dkLen: options.K ?? K })
 
-const limit = Number((1n << 32n) / BigInt(Q))
+const C = 1n << 32n
 
-export function isSplit(hash: Uint8Array): boolean {
+export function isSplit(hash: Uint8Array, options: { Q?: number } = {}): boolean {
+	const q = options.Q ?? Q
+	const limit = Number(C / BigInt(q))
 	const view = new DataView(hash.buffer, hash.byteOffset, 4)
 	return view.getUint32(0) < limit
 }
@@ -58,8 +58,9 @@ export const equalNodes = (a: Node, b: Node) =>
 const size = new ArrayBuffer(4)
 const view = new DataView(size)
 
-export function hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-	const hash = blake3.create({ dkLen: K })
+export function hashEntry(key: Uint8Array, value: Uint8Array, options: { K?: number } = {}): Uint8Array {
+	const k = options.K ?? K
+	const hash = blake3.create({ dkLen: k })
 	view.setUint32(0, key.length)
 	hash.update(new Uint8Array(size))
 	hash.update(key)

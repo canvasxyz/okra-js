@@ -1,13 +1,20 @@
 import test, { ExecutionContext } from "ava"
 
-import { build } from "@canvas-js/okra-level"
+import { Builder } from "@canvas-js/okra-level"
 import { bytesToHex } from "@noble/hashes/utils"
 
 import { getDB, iota } from "./utils.js"
 
+const K = 16
+const Q = 4
+
 const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
-	const db = getDB()
-	const root = await build(db, iota(count))
+	const builder = await Builder.open(getDB(t), { K, Q })
+	for (const [key, value] of iota(count)) {
+		await builder.set(key, value)
+	}
+
+	const root = await builder.finalize()
 	t.is(root.level, rootLevel)
 	t.is(bytesToHex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
 }

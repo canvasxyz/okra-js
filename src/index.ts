@@ -1,5 +1,5 @@
 export { OKRA_VERSION } from "./header.js"
 export { Key, Node } from "./schema.js"
-export { build } from "./build.js"
+export { Builder } from "./builder.js"
 export { Tree } from "./tree.js"
-export { K, Q, leafAnchorHash, hashEntry, equalNodes, equalKeys, equalArrays } from "./utils.js"
+export { K, Q, getLeafAnchorHash, hashEntry, equalNodes, equalKeys, equalArrays } from "./utils.js"

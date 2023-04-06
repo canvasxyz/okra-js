@@ -8,19 +8,8 @@ import debug from "debug"
 debug.formatters.h = bytesToHex
 debug.formatters.k = (key: Key) => (key ? bytesToHex(key) : "null")
 
-import {
-	Key,
-	Node,
-	entryToNode,
-	nodeToEntry,
-	createEntryKey,
-	parseNodeHash,
-	parseNodeValue,
-	parseNodeKey,
-} from "./schema.js"
-
-import { assert, equalArrays, equalKeys, hashEntry, isSplit, lessThan, K, Q, leafAnchorHash } from "./utils.js"
-
+import { Key, Node, entryToNode, nodeToEntry, createEntryKey, parseNodeValue, parseNodeKey } from "./schema.js"
+import { assert, equalArrays, equalKeys, hashEntry, isSplit, lessThan, K, Q, getLeafAnchorHash } from "./utils.js"
 import { HEADER_KEY, getHeader, isHeaderEntry } from "./header.js"
 
 type Operation = AbstractBatchOperation<any, Uint8Array, Uint8Array>
@@ -49,21 +38,26 @@ export class Tree {
 
 	public static async open(
 		db: AbstractLevel<any, Uint8Array, Uint8Array>,
-		log: (format: string, ...args: any[]) => void = debug("okra:tree")
+		options: { K?: number; Q?: number; log?: (format: string, ...args: any[]) => void } = {}
 	): Promise<Tree> {
+		const k = options.K ?? K
+		const q = options.Q ?? Q
+
 		const header = await get(db, HEADER_KEY)
 		if (header === null) {
-			await db.put(HEADER_KEY, getHeader(K, Q))
-			await db.put(createEntryKey(0, null), leafAnchorHash)
-		} else if (!equalArrays(header, getHeader(K, Q))) {
+			await db.put(HEADER_KEY, getHeader({ K: K, Q: q }))
+			await db.put(createEntryKey(0, null), getLeafAnchorHash({ K: k }))
+		} else if (!equalArrays(header, getHeader({ K: K, Q: q }))) {
 			throw new Error("Invalid header")
 		}
 
-		return new Tree(db, log)
+		return new Tree(db, k, q, options.log ?? debug("okra:tree"))
 	}
 
 	constructor(
 		private readonly db: AbstractLevel<any, Uint8Array, Uint8Array>,
+		private readonly K: number,
+		private readonly Q: number,
 		private readonly print: (format: string, ...args: any[]) => void
 	) {}
 
@@ -78,7 +72,7 @@ export class Tree {
 	public async get(key: Uint8Array): Promise<Uint8Array | null> {
 		const entryKey = createEntryKey(0, key)
 		const entryValue = await get(this.db, entryKey)
-		return entryValue && parseNodeValue(entryValue)
+		return entryValue && parseNodeValue(entryValue, { K: this.K })
 	}
 
 	public async getRoot(): Promise<Node> {
@@ -90,7 +84,7 @@ export class Tree {
 		const rootEntry = await iter.next()
 		assert(rootEntry !== undefined)
 
-		const root = entryToNode(rootEntry)
+		const root = entryToNode(rootEntry, { K: this.K })
 		assert(root.key === null)
 
 		return root
@@ -103,14 +97,7 @@ export class Tree {
 			return null
 		}
 
-		assert(entryValue.length >= K)
-		const hash = parseNodeHash(entryValue)
-		if (level === 0 && key !== null) {
-			const value = parseNodeValue(entryValue)
-			return { level, key, hash, value }
-		} else {
-			return { level, key, hash }
-		}
+		return entryToNode([entryKey, entryValue], { K: this.K })
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
@@ -167,21 +154,18 @@ export class Tree {
 	private async applyLeaf(firstChild: Key, operation: Operation): Promise<Result> {
 		this.log("applyLeaf(%k, { %s %h })", firstChild, operation.type, operation.key)
 		if (operation.type === "put") {
-			const hash = hashEntry(operation.key, operation.value)
-			await this.setNode({
-				level: 0,
-				key: operation.key,
-				hash,
-				value: operation.value,
-			})
-			if (lessThan(firstChild, operation.key)) {
-				if (isSplit(hash)) {
-					this.newSiblings.push(operation.key)
+			const { key, value } = operation
+			const hash = hashEntry(key, value, { K: this.K })
+			await this.setNode({ level: 0, key, hash, value })
+
+			if (lessThan(firstChild, key)) {
+				if (isSplit(hash, { Q: this.Q })) {
+					this.newSiblings.push(key)
 				}
 
 				return Result.Update
-			} else if (equalKeys(firstChild, operation.key)) {
-				if (firstChild === null || isSplit(hash)) {
+			} else if (equalKeys(firstChild, key)) {
+				if (firstChild === null || isSplit(hash, { Q: this.Q })) {
 					return Result.Update
 				} else {
 					return Result.Delete
@@ -190,8 +174,9 @@ export class Tree {
 				throw new Error("invalid database")
 			}
 		} else if (operation.type === "del") {
-			await this.db.del(createEntryKey(0, operation.key))
-			if (equalKeys(operation.key, firstChild)) {
+			const { key } = operation
+			await this.db.del(createEntryKey(0, key))
+			if (equalKeys(key, firstChild)) {
 				return Result.Delete
 			} else {
 				return Result.Update
@@ -284,7 +269,7 @@ export class Tree {
 			let entry = await iter.next()
 			assert(entry !== undefined)
 
-			let node = entryToNode(entry)
+			let node = entryToNode(entry, { K: this.K })
 			assert(node.level === level && equalKeys(key, node.key))
 
 			yield node
@@ -296,8 +281,8 @@ export class Tree {
 					break
 				}
 
-				node = entryToNode(entry)
-				if (node.level !== level || isSplit(node.hash)) {
+				node = entryToNode(entry, { K: this.K })
+				if (node.level !== level || isSplit(node.hash, { Q: this.Q })) {
 					break
 				}
 
@@ -343,7 +328,7 @@ export class Tree {
 			}
 
 			const previousGrandChild = await this.getNode(level - 1, previousChildKey)
-			if (previousGrandChild !== null && isSplit(previousGrandChild.hash)) {
+			if (previousGrandChild !== null && isSplit(previousGrandChild.hash, { Q: this.Q })) {
 				return previousChildKey
 			}
 
@@ -369,11 +354,11 @@ export class Tree {
 		const node: Node = { level, key, hash: hash.digest() }
 		this.log("------- %h", node.hash)
 		await this.setNode(node)
-		return isSplit(node.hash)
+		return isSplit(node.hash, { Q: this.Q })
 	}
 
 	private async setNode(node: Node): Promise<void> {
-		const [key, value] = nodeToEntry(node)
+		const [key, value] = nodeToEntry(node, { K: this.K })
 		this.log("setting %h -> %h", key, value)
 		await this.db.put(key, value)
 	}
@@ -383,7 +368,7 @@ export class Tree {
 		const last = await iter.next()
 		assert(last)
 
-		const node = entryToNode(last)
+		const node = entryToNode(last, { K: this.K })
 		assert(node.level === level)
 
 		return node

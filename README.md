@@ -13,16 +13,15 @@ Pure JS okra implementation over an abstract-level interface.
 ## Installation
 
 ```
-npm i okra-js
+npm i okra-level
 ```
 
 ```js
-import * as okra from "@canvas-js/okra-browser"
+import { Tree } from "@canvas-js/okra-level"
 
 const tree = await okra.Tree.open("example")
 
-const toHex = (hash) =>
-	[...hash].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+const toHex = (hash) => [...hash].map((byte) => byte.toString(16).padStart(2, "0")).join("")
 
 // all reads and writes take place within transaction callbacks
 await tree.read(async (txn) => {
