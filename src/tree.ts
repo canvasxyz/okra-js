@@ -4,6 +4,10 @@ import { bytesToHex } from "@noble/hashes/utils"
 import { AbstractLevel, AbstractBatchOperation } from "abstract-level"
 // import ModuleError from "module-error"
 
+import debug from "debug"
+debug.formatters.h = bytesToHex
+debug.formatters.k = (key: Key) => (key ? bytesToHex(key) : "null")
+
 import {
 	Key,
 	Node,
@@ -18,9 +22,6 @@ import {
 import { assert, equalArrays, equalKeys, hashEntry, isSplit, lessThan, K, Q, leafAnchorHash } from "./utils.js"
 
 import { HEADER_KEY, getHeader, isHeaderEntry } from "./header.js"
-import debug from "debug"
-debug.formatters.h = bytesToHex
-debug.formatters.k = (key: Key) => (key ? bytesToHex(key) : "null")
 
 type Operation = AbstractBatchOperation<any, Uint8Array, Uint8Array>
 
@@ -65,6 +66,10 @@ export class Tree {
 		private readonly db: AbstractLevel<any, Uint8Array, Uint8Array>,
 		private readonly print: (format: string, ...args: any[]) => void
 	) {}
+
+	public async close() {
+		await this.db.close()
+	}
 
 	private log(format: string, ...args: any[]) {
 		this.print("%s" + format, Tree.indent.repeat(this.depth), ...args)
