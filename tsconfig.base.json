@@ -1,0 +1,13 @@
+{
+	"compilerOptions": {
+		"composite": true,
+		"strict": true,
+		"module": "es2022",
+		"target": "es2022",
+		"moduleResolution": "node",
+		"sourceMap": false,
+		"esModuleInterop": true,
+		"declarationMap": true,
+		"allowSyntheticDefaultImports": true
+	}
+}
