@@ -8,9 +8,21 @@ import debug from "debug"
 debug.formatters.h = bytesToHex
 debug.formatters.k = (key: Key) => (key ? bytesToHex(key) : "null")
 
-import { Key, Node, entryToNode, nodeToEntry, createEntryKey, parseNodeValue, parseNodeKey } from "./schema.js"
-import { assert, equalArrays, equalKeys, hashEntry, isSplit, lessThan, K, Q, getLeafAnchorHash } from "./utils.js"
+import { Key, Node, entryToNode, nodeToEntry, createEntryKey, parseNodeValue, parseNodeKey } from "./nodes.js"
+import {
+	assert,
+	equalArrays,
+	equalKeys,
+	hashEntry,
+	isSplit,
+	lessThan,
+	K,
+	Q,
+	getLeafAnchorHash,
+	encodingOptions,
+} from "./utils.js"
 import { HEADER_KEY, getHeader, isHeaderEntry } from "./header.js"
+import { Builder } from "./builder.js"
 
 type Operation = AbstractBatchOperation<any, Uint8Array, Uint8Array>
 
@@ -18,35 +30,35 @@ type Operation = AbstractBatchOperation<any, Uint8Array, Uint8Array>
 const Result = { Update: 0, Delete: 1 } as const
 type Result = typeof Result[keyof typeof Result]
 
-async function get(db: AbstractLevel<any, Uint8Array, Uint8Array>, key: Uint8Array): Promise<Uint8Array | null> {
-	try {
-		return await db.get(key)
-	} catch (err: any) {
-		// TODO: switch to `err instanceof ModuleError` when memory-level fixes their shit
-		if (err.code === "LEVEL_NOT_FOUND") {
-			return null
-		} else {
-			throw err
+export class Tree<TFormat, KDefault, VDefault> {
+	private static indent = "  "
+	private static async get<TFormat, KDefault, VDefault>(
+		db: AbstractLevel<TFormat, KDefault, VDefault>,
+		key: Uint8Array
+	): Promise<Uint8Array | null> {
+		try {
+			return await db.get(key, encodingOptions)
+		} catch (err: any) {
+			// TODO: switch to `err instanceof ModuleError` when memory-level fixes their shit
+			if (err.code === "LEVEL_NOT_FOUND") {
+				return null
+			} else {
+				throw err
+			}
 		}
 	}
-}
 
-export class Tree {
-	private static indent = "  "
-	private depth = 0
-	private newSiblings: Key[] = []
-
-	public static async open(
-		db: AbstractLevel<any, Uint8Array, Uint8Array>,
+	public static async open<TFormat, KDefault, VDefault>(
+		db: AbstractLevel<TFormat, KDefault, VDefault>,
 		options: { K?: number; Q?: number; log?: (format: string, ...args: any[]) => void } = {}
-	): Promise<Tree> {
+	): Promise<Tree<TFormat, KDefault, VDefault>> {
 		const k = options.K ?? K
 		const q = options.Q ?? Q
 
-		const header = await get(db, HEADER_KEY)
+		const header = await Tree.get(db, HEADER_KEY)
 		if (header === null) {
-			await db.put(HEADER_KEY, getHeader({ K: K, Q: q }))
-			await db.put(createEntryKey(0, null), getLeafAnchorHash({ K: k }))
+			await db.put(HEADER_KEY, getHeader({ K: K, Q: q }), encodingOptions)
+			await db.put(createEntryKey(0, null), getLeafAnchorHash({ K: k }), encodingOptions)
 		} else if (!equalArrays(header, getHeader({ K: K, Q: q }))) {
 			throw new Error("Invalid header")
 		}
@@ -54,15 +66,31 @@ export class Tree {
 		return new Tree(db, k, q, options.log ?? debug("okra:tree"))
 	}
 
+	private depth = 0
+	private newSiblings: Key[] = []
+
 	constructor(
-		private readonly db: AbstractLevel<any, Uint8Array, Uint8Array>,
-		private readonly K: number,
-		private readonly Q: number,
+		public readonly db: AbstractLevel<TFormat, KDefault, VDefault>,
+		public readonly K: number,
+		public readonly Q: number,
 		private readonly print: (format: string, ...args: any[]) => void
 	) {}
 
-	public async close() {
+	public async close(): Promise<void> {
 		await this.db.close()
+	}
+
+	/**
+	 * raze and rebuild the merkle tree from the leaves
+	 */
+	public async rebuild(): Promise<void> {
+		const iter = this.db.keys({ gte: createEntryKey(1, null), lt: HEADER_KEY })
+		for await (const key of iter) {
+			await this.db.del(key, encodingOptions)
+		}
+
+		const builder = await Builder.open(this.db, { K: this.K, Q: this.Q })
+		await builder.finalize()
 	}
 
 	private log(format: string, ...args: any[]) {
@@ -71,12 +99,16 @@ export class Tree {
 
 	public async get(key: Uint8Array): Promise<Uint8Array | null> {
 		const entryKey = createEntryKey(0, key)
-		const entryValue = await get(this.db, entryKey)
+		const entryValue = await Tree.get(this.db, entryKey)
 		return entryValue && parseNodeValue(entryValue, { K: this.K })
 	}
 
 	public async getRoot(): Promise<Node> {
-		const iter = this.db.iterator({ lte: HEADER_KEY, reverse: true })
+		const iter = this.db.iterator<Uint8Array, Uint8Array>({
+			lte: HEADER_KEY,
+			reverse: true,
+			...encodingOptions,
+		})
 
 		const headerEntry = await iter.next()
 		assert(headerEntry !== undefined && isHeaderEntry(headerEntry))
@@ -90,9 +122,23 @@ export class Tree {
 		return root
 	}
 
+	public async getChildren(level: number, key: Key): Promise<Node[]> {
+		if (level === 0) {
+			throw new RangeError("Cannot get children of a leaf node")
+		}
+
+		const children: Node[] = []
+
+		for await (const node of this.range(level - 1, key)) {
+			children.push(node)
+		}
+
+		return children
+	}
+
 	public async getNode(level: number, key: Key): Promise<Node | null> {
 		const entryKey = createEntryKey(level, key)
-		const entryValue = await get(this.db, entryKey)
+		const entryValue = await Tree.get(this.db, entryKey)
 		if (entryValue === null) {
 			return null
 		}
@@ -145,7 +191,7 @@ export class Tree {
 
 			const rootEntryKey = createEntryKey(rootLevel, null)
 			this.log("deleting %h", rootEntryKey)
-			await this.db.del(rootEntryKey)
+			await this.db.del(rootEntryKey, encodingOptions)
 
 			rootLevel--
 		}
@@ -175,7 +221,7 @@ export class Tree {
 			}
 		} else if (operation.type === "del") {
 			const { key } = operation
-			await this.db.del(createEntryKey(0, key))
+			await this.db.del(createEntryKey(0, key), encodingOptions)
 			if (equalKeys(key, firstChild)) {
 				return Result.Delete
 			} else {
@@ -264,13 +310,21 @@ export class Tree {
 	}
 
 	private async *range(level: number, key: Key): AsyncIterable<Node> {
-		const iter = await this.db.iterator({ gte: createEntryKey(level, key) })
+		const iter = await this.db.iterator<Uint8Array, Uint8Array>({
+			gte: createEntryKey(level, key),
+			...encodingOptions,
+		})
+
 		try {
 			let entry = await iter.next()
-			assert(entry !== undefined)
+			if (entry === undefined) {
+				throw new Error("Node not found")
+			}
 
 			let node = entryToNode(entry, { K: this.K })
-			assert(node.level === level && equalKeys(key, node.key))
+			if (node.level !== level || !equalKeys(key, node.key)) {
+				throw new Error("Not not found")
+			}
 
 			yield node
 
@@ -317,7 +371,7 @@ export class Tree {
 		const targetEntryKey = createEntryKey(level, target)
 
 		this.log("deleting %h", targetEntryKey)
-		await this.db.del(targetEntryKey)
+		await this.db.del(targetEntryKey, encodingOptions)
 
 		for await (const previousChildEntryKey of this.db.keys({ lt: targetEntryKey, reverse: true })) {
 			this.log("previousChildEntryKey: %h", previousChildEntryKey)
@@ -333,7 +387,7 @@ export class Tree {
 			}
 
 			this.log("deleting %h", previousChildEntryKey)
-			await this.db.del(previousChildEntryKey)
+			await this.db.del(previousChildEntryKey, encodingOptions)
 		}
 
 		throw new Error("internal error")
@@ -360,11 +414,16 @@ export class Tree {
 	private async setNode(node: Node): Promise<void> {
 		const [key, value] = nodeToEntry(node, { K: this.K })
 		this.log("setting %h -> %h", key, value)
-		await this.db.put(key, value)
+		await this.db.put(key, value, encodingOptions)
 	}
 
 	private async getLastNode(level: number): Promise<Node> {
-		const iter = this.db.iterator({ lt: createEntryKey(level + 1, null), reverse: true })
+		const iter = this.db.iterator<Uint8Array, Uint8Array>({
+			lt: createEntryKey(level + 1, null),
+			reverse: true,
+			...encodingOptions,
+		})
+
 		const last = await iter.next()
 		assert(last)
 

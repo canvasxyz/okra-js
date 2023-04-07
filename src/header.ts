@@ -1,4 +1,4 @@
-import type { Entry } from "./schema.js"
+import type { Entry } from "./nodes.js"
 import { K, Q, equalArrays } from "./utils.js"
 
 export const HEADER_KEY = new Uint8Array([0xff])

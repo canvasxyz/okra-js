@@ -3,25 +3,28 @@ import { AbstractLevel } from "abstract-level"
 import { blake3 } from "@noble/hashes/blake3"
 
 import { HEADER_KEY, getHeader } from "./header.js"
-import { Key, Node, createEntryKey, nodeToEntry } from "./schema.js"
-import { K, Q, assert, hashEntry, isSplit, getLeafAnchorHash } from "./utils.js"
+import { Key, Node, createEntryKey, nodeToEntry } from "./nodes.js"
+import { K, Q, assert, hashEntry, isSplit, getLeafAnchorHash, encodingOptions } from "./utils.js"
 
-import { entryToNode } from "./schema.js"
+import { entryToNode } from "./nodes.js"
 
-export class Builder {
-	public static async open(db: AbstractLevel<any, Uint8Array, Uint8Array>, options: { K?: number; Q?: number } = {}) {
+export class Builder<TFormat, KDefault, VDefault> {
+	public static async open<TFormat, KDefault, VDefault>(
+		db: AbstractLevel<TFormat, KDefault, VDefault>,
+		options: { K?: number; Q?: number } = {}
+	): Promise<Builder<TFormat, KDefault, VDefault>> {
 		const k = options.K ?? K
 		const q = options.Q ?? Q
 
-		await db.put(HEADER_KEY, getHeader({ K: K, Q: q }))
-		await db.put(createEntryKey(0, null), getLeafAnchorHash({ K: k }))
+		await db.put(HEADER_KEY, getHeader({ K: K, Q: q }), encodingOptions)
+		await db.put(createEntryKey(0, null), getLeafAnchorHash({ K: k }), encodingOptions)
 
 		return new Builder(db, k, q)
 	}
 
 	private nodeCount = 1
 	private constructor(
-		public readonly db: AbstractLevel<any, Uint8Array, Uint8Array>,
+		public readonly db: AbstractLevel<TFormat, KDefault, VDefault>,
 		private readonly K: number,
 		private readonly Q: number
 	) {}
@@ -39,19 +42,20 @@ export class Builder {
 		}
 
 		const rootEntryKey = createEntryKey(level, null)
-		const rootEntryValue = await this.db.get(rootEntryKey)
+		const rootEntryValue = await this.db.get<Uint8Array, Uint8Array>(rootEntryKey, encodingOptions)
 		return entryToNode([rootEntryKey, rootEntryValue], { K: this.K })
 	}
 
 	private async setNode(node: Node) {
 		const [key, value] = nodeToEntry(node, { K: this.K })
-		await this.db.put(key, value)
+		await this.db.put<Uint8Array, Uint8Array>(key, value, encodingOptions)
 	}
 
 	private async buildLevel(level: number): Promise<number> {
-		const iter = await this.db.iterator({
+		const iter = await this.db.iterator<Uint8Array, Uint8Array>({
 			gte: createEntryKey(level, null),
 			lt: createEntryKey(level + 1, null),
+			...encodingOptions,
 		})
 
 		try {

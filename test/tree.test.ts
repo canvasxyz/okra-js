@@ -4,7 +4,7 @@ import { bytesToHex } from "@noble/hashes/utils"
 
 import { Builder, Tree, getLeafAnchorHash } from "@canvas-js/okra-level"
 
-import { compareEntries, getDB, iota, shuffle } from "./utils.js"
+import { compareEntries, getDB, iota, shuffle, encodingOptions } from "./utils.js"
 
 const K = 16
 const Q = 4
@@ -54,18 +54,17 @@ const testShuffleIota =
 			t.log(`iteration ${i + 1}/${iters}`)
 
 			shuffle(entries)
-			const db = getDB()
-			const tree = await Tree.open(db, { K, Q })
+			const tree = await Tree.open(getDB(), { K, Q })
 			try {
 				for (const [key, value] of entries) {
 					await tree.set(key, value)
 				}
 
 				t.deepEqual(await tree.getRoot(), root)
-				const delta = await compareEntries(t, builder.db.iterator(), db.iterator())
+				const delta = await compareEntries(t, builder.db.iterator(encodingOptions), tree.db.iterator(encodingOptions))
 				t.is(delta, 0)
 			} finally {
-				db.close()
+				tree.db.close()
 			}
 		}
 	}

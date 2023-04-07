@@ -2,8 +2,10 @@ import type { ExecutionContext } from "ava"
 import { MemoryLevel } from "memory-level"
 import { bytesToHex } from "@noble/hashes/utils"
 
+export const encodingOptions = { keyEncoding: "view", valueEncoding: "view" }
+
 export function getDB(t?: ExecutionContext) {
-	const db = new MemoryLevel<Uint8Array, Uint8Array>({ keyEncoding: "view", valueEncoding: "view" })
+	const db = new MemoryLevel({ keyEncoding: "view", valueEncoding: "view" })
 	if (t !== undefined) {
 		t.teardown(() => db.close())
 	}

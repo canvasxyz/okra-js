@@ -1,6 +1,8 @@
 import { blake3 } from "@noble/hashes/blake3"
 
-import { Key, Node } from "./schema.js"
+import { Key, Node } from "./nodes.js"
+
+export const encodingOptions = { keyEncoding: "view", valueEncoding: "view" }
 
 export const K = 16
 export const Q = 32
