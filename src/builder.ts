@@ -21,7 +21,7 @@ export class Builder {
 
 	private nodeCount = 1
 	private constructor(
-		private readonly db: AbstractLevel<any, Uint8Array, Uint8Array>,
+		public readonly db: AbstractLevel<any, Uint8Array, Uint8Array>,
 		private readonly K: number,
 		private readonly Q: number
 	) {}

@@ -2,9 +2,9 @@ import test, { ExecutionContext } from "ava"
 
 import { bytesToHex } from "@noble/hashes/utils"
 
-import { Tree, getLeafAnchorHash } from "@canvas-js/okra-level"
+import { Builder, Tree, getLeafAnchorHash } from "@canvas-js/okra-level"
 
-import { getDB, iota, shuffle } from "./utils.js"
+import { compareEntries, getDB, iota, shuffle } from "./utils.js"
 
 const K = 16
 const Q = 4
@@ -38,7 +38,17 @@ const testShuffleIota =
 	(count: number, rootLevel: number, rootHashPrefix: string, iters: number) => async (t: ExecutionContext) => {
 		t.timeout(Math.max(5 * 60 * 1000, iters * count))
 
-		const entries = [...iota(count)]
+		const builder = await Builder.open(getDB(t), { K, Q })
+
+		const entries: [Uint8Array, Uint8Array][] = []
+		for (const [key, value] of iota(count)) {
+			entries.push([key, value])
+			await builder.set(key, value)
+		}
+
+		const root = await builder.finalize()
+		t.is(root.level, rootLevel)
+		t.is(bytesToHex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
 
 		for (let i = 0; i < iters; i++) {
 			t.log(`iteration ${i + 1}/${iters}`)
@@ -51,9 +61,9 @@ const testShuffleIota =
 					await tree.set(key, value)
 				}
 
-				const root = await tree.getRoot()
-				t.is(root.level, rootLevel)
-				t.is(bytesToHex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
+				t.deepEqual(await tree.getRoot(), root)
+				const delta = await compareEntries(t, builder.db.iterator(), db.iterator())
+				t.is(delta, 0)
 			} finally {
 				db.close()
 			}
