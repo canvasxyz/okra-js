@@ -52,7 +52,7 @@ export class Builder<TFormat, KDefault, VDefault> {
 	}
 
 	private async buildLevel(level: number): Promise<number> {
-		const iter = await this.db.iterator<Uint8Array, Uint8Array>({
+		const iter = this.db.iterator<Uint8Array, Uint8Array>({
 			gte: createEntryKey(level, null),
 			lt: createEntryKey(level + 1, null),
 			...encodingOptions,
