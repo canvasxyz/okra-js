@@ -18,11 +18,13 @@ npm i @canvas-js/okra-level
 
 Import the `Tree` class and pass an [`abstract-level`](https://github.com/Level/abstract-level) instance into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
 
-The tree can be used as a normal key/value store with `.get`, `.set`, and `.delete` methods. In addition, you can access the internal merkle tree nodes using `getRoot`, `getNode`, and `getChildren` methods.
+The tree can be used as a normal key/value store with `.get`, `.set`, and `.delete` methods. In addition, you can access the internal merkle tree nodes using `getRoot`, `getNode`, `getChildren`, and `seek` methods.
 
 Setting or deleting an entry translates into several `put` and `del` operations in the underlying `abstract-level` database. The `abstract-level` interface only offers "transactions" in the form of batched operations, which isn't suitable for dynamic internal tree maintenance. As a result, `.set` and `.delete` have weak consistency properties: if a underlying `put` or `del` fails, it will leave the tree in a corrupted state. If this happens, it can be corrected with a call to `await Tree.rebuild()`.
 
 If atomic and consistent transactions are important to you, consider the native NodeJS binding for the Zig implementation of okra, which is fully ACID compliant and supports reads and writes concurrently.
+
+Concurrent calls to `.set` and `.delete` **WILL cause internal corruption** - you must always use `await`, locks, a queue, or some other kind of concurrency control.
 
 You can override the default internal hash size and target fanout degree by passing `{ K: number, Q: number }` into `Tree.open`, although this is discouraged.
 
@@ -83,6 +85,14 @@ declare type Node = {
 	value?: Uint8Array
 }
 
+declare interface IteratorOptions {
+	reverse?: boolean
+	gt?: Uint8Array
+	gte?: Uint8Array
+	lt?: Uint8Array
+	lte?: Uint8Array
+}
+
 declare class Tree<TFormat, KDefault, VDefault> {
 	public readonly db: AbstractLevel<TFormat, KDefault, VDefault>
 	public readonly K: number
@@ -100,11 +110,13 @@ declare class Tree<TFormat, KDefault, VDefault> {
 	public get(key: Uint8Array): Promise<Uint8Array | null>
 	public set(key: Uint8Array, value: Uint8Array): Promise<void>
 	public delete(key: Uint8Array): Promise<void>
+	public iterator(options: IteratorOptions): AsyncIterable<[Uint8Array, Uint8Array]>
 
 	// access internal merkle tree nodes
 	public getRoot(): Promise<Node>
 	public getNode(level: number, key: Key): Promise<Node | null>
 	public getChildren(level: number, key: Key): Promise<Node[]>
+	public seek(level: number, key: Key): Promise<Node | null>
 
 	// raze and rebuild the merkle tree from the leaves
 	public rebuild(): Promise<void>
