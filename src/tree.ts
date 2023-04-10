@@ -1,13 +1,13 @@
 import { blake3 } from "@noble/hashes/blake3"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { AbstractLevel, AbstractBatchOperation, AbstractIteratorOptions } from "abstract-level"
-// import ModuleError from "module-error"
+import { AbstractLevel, AbstractIteratorOptions } from "abstract-level"
 
-import { Key, Node } from "./nodes.js"
-import { getHeader, isHeaderEntry } from "./header.js"
+import { Delta, Key, Node, Source } from "./types.js"
+import { getHeader, isHeaderEntry, HEADER_KEY } from "./header.js"
 import { Builder } from "./builder.js"
 import { debug } from "./format.js"
-import { K, Q, HEADER_KEY } from "./constants.js"
+import { K, Q } from "./constants.js"
 import {
 	assert,
 	equalArrays,
@@ -24,22 +24,20 @@ import {
 	parseNodeKey,
 	Entry,
 } from "./utils.js"
+import { Driver } from "./sync.js"
 
-type Operation = AbstractBatchOperation<any, Uint8Array, Uint8Array>
+type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
 
 // we have enums at home
 const Result = { Update: 0, Delete: 1 } as const
 type Result = typeof Result[keyof typeof Result]
 
-export interface IteratorOptions {
-	reverse?: boolean
-	gt?: Uint8Array
-	gte?: Uint8Array
-	lt?: Uint8Array
-	lte?: Uint8Array
-}
-
-export class Tree<TFormat, KDefault, VDefault> {
+/**
+ * You should never have to instantiate the generic type parameters manually.
+ * Just pass an abstract-level instance to Tree.open and the TypeScript
+ * compiler should be able to infer the rest.
+ */
+export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Source {
 	private static indent = "  "
 	private static async get<TFormat, KDefault, VDefault>(
 		db: AbstractLevel<TFormat, KDefault, VDefault>,
@@ -90,23 +88,6 @@ export class Tree<TFormat, KDefault, VDefault> {
 	}
 
 	/**
-	 * raze and rebuild the merkle tree from the leaves
-	 */
-	public async rebuild(): Promise<void> {
-		const iter = this.db.keys({ gte: createEntryKey(1, null), lt: HEADER_KEY })
-		for await (const key of iter) {
-			await this.db.del(key, encodingOptions)
-		}
-
-		const builder = await Builder.open(this.db, { K: this.K, Q: this.Q })
-		await builder.finalize()
-	}
-
-	private log(format: string, ...args: any[]) {
-		this.formatter("%s" + format, Tree.indent.repeat(this.depth), ...args)
-	}
-
-	/**
 	 * Iterate over a range of leaf key/value entries. Does not yield the leaf anchor node.
 	 * @param lowerBound *inclusive* lower bound (default null/no lower bound)
 	 * @param upperBound *exclusive* upper bound (default null/no upper bound)
@@ -145,57 +126,14 @@ export class Tree<TFormat, KDefault, VDefault> {
 		return entryValue && parseNodeValue(entryValue, { K: this.K })
 	}
 
-	public async getRoot(): Promise<Node> {
-		const iter = this.db.iterator<Uint8Array, Uint8Array>({
-			lte: HEADER_KEY,
-			reverse: true,
-			...encodingOptions,
-		})
-
-		const headerEntry = await iter.next()
-		assert(headerEntry !== undefined && isHeaderEntry(headerEntry))
-
-		const rootEntry = await iter.next()
-		assert(rootEntry !== undefined)
-
-		const root = entryToNode(rootEntry, { K: this.K })
-		assert(root.key === null)
-
-		return root
-	}
-
-	public async getChildren(level: number, key: Key): Promise<Node[]> {
-		if (level === 0) {
-			throw new RangeError("Cannot get children of a leaf node")
-		}
-
-		const children: Node[] = []
-
-		for await (const node of this.range(level - 1, key)) {
-			children.push(node)
-		}
-
-		return children
-	}
-
-	public async getNode(level: number, key: Key): Promise<Node | null> {
-		const entryKey = createEntryKey(level, key)
-		const entryValue = await Tree.get(this.db, entryKey)
-		if (entryValue === null) {
-			return null
-		}
-
-		return entryToNode([entryKey, entryValue], { K: this.K })
-	}
-
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
 		this.log(`set(%h, %h)`, key, value)
-		await this.apply({ type: "put", key, value })
+		await this.apply({ type: "set", key, value })
 	}
 
 	public async delete(key: Uint8Array): Promise<void> {
 		this.log(`delete(%h)`, key)
-		await this.apply({ type: "del", key })
+		await this.apply({ type: "delete", key })
 	}
 
 	private async apply(operation: Operation): Promise<void> {
@@ -241,7 +179,7 @@ export class Tree<TFormat, KDefault, VDefault> {
 
 	private async applyLeaf(firstChild: Key, operation: Operation): Promise<Result> {
 		this.log("applyLeaf(%k, { %s %h })", firstChild, operation.type, operation.key)
-		if (operation.type === "put") {
+		if (operation.type === "set") {
 			const { key, value } = operation
 			const hash = hashEntry(key, value, { K: this.K })
 			await this.setNode({ level: 0, key, hash, value })
@@ -261,7 +199,7 @@ export class Tree<TFormat, KDefault, VDefault> {
 			} else {
 				throw new Error("invalid database")
 			}
-		} else if (operation.type === "del") {
+		} else if (operation.type === "delete") {
 			const { key } = operation
 			await this.db.del(createEntryKey(0, key), encodingOptions)
 			if (equalKeys(key, firstChild)) {
@@ -475,7 +413,120 @@ export class Tree<TFormat, KDefault, VDefault> {
 		return node
 	}
 
-	public print(hashSize = 4) {}
+	private log(format: string, ...args: any[]) {
+		this.formatter("%s" + format, Tree.indent.repeat(this.depth), ...args)
+	}
 
-	private printNode() {}
+	/**
+	 * Get the root node of the merkle tree. Returns the leaf anchor node if the tree is empty.
+	 */
+	public async getRoot(): Promise<Node> {
+		const iter = this.db.iterator<Uint8Array, Uint8Array>({
+			lte: HEADER_KEY,
+			reverse: true,
+			...encodingOptions,
+		})
+
+		const headerEntry = await iter.next()
+		assert(headerEntry !== undefined && isHeaderEntry(headerEntry))
+
+		const rootEntry = await iter.next()
+		assert(rootEntry !== undefined)
+
+		const root = entryToNode(rootEntry, { K: this.K })
+		assert(root.key === null)
+
+		return root
+	}
+
+	/**
+	 * Get the children of a node in the merkle tree, identified by level and key.
+	 */
+	public async getChildren(level: number, key: Key): Promise<Node[]> {
+		if (level === 0) {
+			throw new RangeError("Cannot get children of a leaf node")
+		}
+
+		const children: Node[] = []
+
+		for await (const node of this.range(level - 1, key)) {
+			children.push(node)
+		}
+
+		return children
+	}
+
+	/**
+	 * Get a specific node in the merkle tree, identified by level and key.
+	 */
+	public async getNode(level: number, key: Key): Promise<Node | null> {
+		const entryKey = createEntryKey(level, key)
+		const entryValue = await Tree.get(this.db, entryKey)
+		if (entryValue === null) {
+			return null
+		}
+
+		return entryToNode([entryKey, entryValue], { K: this.K })
+	}
+
+	/**
+	 * Iterate over the differences between the entries in the local tree and a remote source.
+	 */
+	public async *sync(source: Source): AsyncIterableIterator<Delta> {
+		const driver = new Driver(source, this)
+		yield* driver.sync()
+	}
+
+	/**
+	 * Raze and rebuild the merkle tree from the leaves.
+	 */
+	public async rebuild(): Promise<void> {
+		const iter = this.db.keys({ gte: createEntryKey(1, null), lt: HEADER_KEY })
+		for await (const key of iter) {
+			await this.db.del(key, encodingOptions)
+		}
+
+		const builder = await Builder.open(this.db, { K: this.K, Q: this.Q })
+		const root = await builder.finalize()
+	}
+
+	/**
+	 * Pretty-print the tree structure to a utf-8 stream.
+	 * Consume with a TextDecoderStream or async iterable sink.
+	 */
+	public async *print(options: { hashSize?: number } = {}): AsyncIterableIterator<Uint8Array> {
+		const hashSize = options.hashSize ?? 4
+		const slot = "  ".repeat(hashSize)
+		const hash = ({ hash }: Node) => hex(hash.subarray(0, hashSize))
+		const encoder = new TextEncoder()
+
+		const tree = this
+		async function* printTree(prefix: string, bullet: string, node: Node): AsyncIterableIterator<Uint8Array> {
+			yield encoder.encode(bullet)
+			yield encoder.encode(` ${hash(node)} `)
+			if (node.level === 0) {
+				if (node.key === null) {
+					yield encoder.encode(`|\n`)
+				} else {
+					yield encoder.encode(`| ${hex(node.key)}\n`)
+				}
+			} else {
+				const children = await tree.getChildren(node.level, node.key)
+				for (const [i, child] of children.entries()) {
+					if (i > 0) {
+						yield encoder.encode(prefix)
+					}
+
+					if (i < children.length - 1) {
+						yield* printTree(prefix + "│   " + slot, i === 0 ? "┬─" : "├─", child)
+					} else {
+						yield* printTree(prefix + "    " + slot, i === 0 ? "──" : "└─", child)
+					}
+				}
+			}
+		}
+
+		const root = await this.getRoot()
+		yield* printTree("    " + slot, "──", root)
+	}
 }

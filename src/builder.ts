@@ -2,9 +2,9 @@ import type { AbstractLevel } from "abstract-level"
 
 import { blake3 } from "@noble/hashes/blake3"
 
-import { getHeader } from "./header.js"
-import { Key, Node } from "./nodes.js"
-import { K, Q, HEADER_KEY } from "./constants.js"
+import { getHeader, HEADER_KEY } from "./header.js"
+import { Key, Node } from "./types.js"
+import { K, Q } from "./constants.js"
 import {
 	assert,
 	hashEntry,
@@ -16,7 +16,7 @@ import {
 	nodeToEntry,
 } from "./utils.js"
 
-export class Builder<TFormat, KDefault, VDefault> {
+export class Builder<TFormat = any, KDefault = any, VDefault = any> {
 	public static async open<TFormat, KDefault, VDefault>(
 		db: AbstractLevel<TFormat, KDefault, VDefault>,
 		options: { K?: number; Q?: number } = {}

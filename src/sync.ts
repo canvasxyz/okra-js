@@ -1,5 +1,5 @@
 import { Tree } from "./tree.js"
-import { Node, Key } from "./nodes.js"
+import { Node, Key, Source, Delta } from "./types.js"
 import { debug } from "./format.js"
 import {
 	assert,
@@ -14,23 +14,7 @@ import {
 
 import { AbstractIterator } from "abstract-level"
 
-export interface Source {
-	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
-	getChildren(level: number, key: Key): Promise<Node[]>
-}
-
-export type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
-
-export async function* sync<TFormat, KDefault, VDefault>(
-	source: Source,
-	target: Tree<TFormat, KDefault, VDefault>
-): AsyncGenerator<Delta, void, undefined> {
-	const driver = new Driver(source, target)
-	yield* driver.sync()
-}
-
-class Driver<TFormat, KDefault, VDefault> {
+export class Driver<TFormat, KDefault, VDefault> {
 	private static indent = "| "
 
 	private depth = 0

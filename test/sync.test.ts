@@ -1,19 +1,12 @@
 import test, { ExecutionContext } from "ava"
-import Prando from "prando"
+import { text } from "node:stream/consumers"
 
-import { Delta, Tree, sync } from "@canvas-js/okra-level"
+import { Delta, collect } from "@canvas-js/okra-level"
 
-import { getDB, iota, getKey, defaultValue, collect } from "./utils.js"
+import { getKey, defaultValue, random, initialize } from "./utils.js"
 
 const K = 16
 const Q = 4
-
-function* random(seed: string, min: number, max: number, count: number): Generator<number, void, undefined> {
-	const rng = new Prando(seed)
-	for (let i = 0; i < count; i++) {
-		yield rng.nextInt(min, max - 1)
-	}
-}
 
 async function testSync(
 	t: ExecutionContext,
@@ -22,20 +15,12 @@ async function testSync(
 	deleteSource: number,
 	deleteTarget: number
 ): Promise<void> {
-	const [source, target] = await Promise.all([Tree.open(getDB(t), { K, Q }), Tree.open(getDB(t), { K, Q })])
-
-	for (const [key, value] of iota(count)) {
-		await Promise.all([source.set(key, value), target.set(key, value)])
-	}
+	const [source, target] = await Promise.all([initialize(t, count, { K, Q }), initialize(t, count, { K, Q })])
 
 	const expected: Delta[] = []
 
 	const deletedFromSource = new Set<number>(random(`${seed}:source`, 0, count, deleteSource))
 	const deletedFromTarget = new Set<number>(random(`${seed}:target`, 0, count, deleteTarget))
-
-	// const toKeys = (a: number[]) => a.sort((a, b) => a - b).map((i) => hex(getKey(i)))
-	// t.log(seed, `deletedFromSource { ${toKeys([...deletedFromSource]).join(", ")} }`)
-	// t.log(seed, `deletedFromTarget { ${toKeys([...deletedFromTarget]).join(", ")} }`)
 
 	for (const i of deletedFromSource) {
 		const key = getKey(i)
@@ -57,7 +42,9 @@ async function testSync(
 		}
 	}
 
-	t.deepEqual(await collect(sync(source, target)), expected)
+	expected.sort(({ key: a }, { key: b }) => Buffer.from(a).compare(Buffer.from(b)))
+
+	t.deepEqual(await collect(target.sync(source)), expected)
 }
 
 test("testSync(100, 10, 10) x 10", async (t) => {

@@ -1,16 +1,29 @@
 import type { ExecutionContext } from "ava"
 import { MemoryLevel } from "memory-level"
 import { bytesToHex as hex } from "@noble/hashes/utils"
+import Prando from "prando"
+
+import { Tree, Builder, hashEntry } from "@canvas-js/okra-level"
 
 export const encodingOptions = { keyEncoding: "view", valueEncoding: "view" }
 
-export function getDB(t?: ExecutionContext) {
-	const db = new MemoryLevel({ keyEncoding: "view", valueEncoding: "view" })
+export function getDB(t?: ExecutionContext): MemoryLevel<Uint8Array, Uint8Array> {
+	const db = new MemoryLevel<Uint8Array, Uint8Array>({ keyEncoding: "view", valueEncoding: "view" })
 	if (t !== undefined) {
 		t.teardown(() => db.close())
 	}
 
 	return db
+}
+
+export async function initialize(t: ExecutionContext, count: number, options: { K: number; Q: number }): Promise<Tree> {
+	const db = getDB(t)
+	const builder = await Builder.open(db, options)
+	for (const [key, value] of iota(count)) {
+		await builder.set(key, value)
+	}
+	await builder.finalize()
+	return await Tree.open(db, options)
 }
 
 export const defaultValue = Buffer.from([0xff, 0xff, 0xff, 0xff])
@@ -21,18 +34,10 @@ export function getKey(i: number): Buffer {
 	return key
 }
 
-export function* iota(iota: number): Iterable<[Uint8Array, Uint8Array]> {
-	for (let i = 0; i < iota; i++) {
+export function* iota(count: number): Iterable<[Uint8Array, Uint8Array]> {
+	for (let i = 0; i < count; i++) {
 		yield [getKey(i), Buffer.from(defaultValue)]
 	}
-}
-
-export async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
-	const values: T[] = []
-	for await (const value of iter) {
-		values.push(value)
-	}
-	return values
 }
 
 export async function compareEntries(
@@ -104,5 +109,12 @@ export function shuffle<T>(array: T[]) {
 		const temp = array[i]
 		array[i] = array[j]
 		array[j] = temp
+	}
+}
+
+export function* random(seed: string, min: number, max: number, count: number): Generator<number, void, undefined> {
+	const rng = new Prando(seed)
+	for (let i = 0; i < count; i++) {
+		yield rng.nextInt(min, max - 1)
 	}
 }

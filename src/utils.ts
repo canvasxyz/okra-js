@@ -1,7 +1,7 @@
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { Key, Node } from "./nodes.js"
+import { Key, Node } from "./types.js"
 import { K, Q } from "./constants.js"
 
 export type Entry = [key: Uint8Array, value: Uint8Array]
@@ -126,4 +126,12 @@ export function hashEntry(key: Uint8Array, value: Uint8Array, options: { K?: num
 	hash.update(new Uint8Array(size))
 	hash.update(value)
 	return hash.digest()
+}
+
+export async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+	const values: T[] = []
+	for await (const value of iter) {
+		values.push(value)
+	}
+	return values
 }
