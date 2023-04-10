@@ -1,14 +1,13 @@
 import { blake3 } from "@noble/hashes/blake3"
-import { bytesToHex } from "@noble/hashes/utils"
 
-import { AbstractLevel, AbstractBatchOperation } from "abstract-level"
+import { AbstractLevel, AbstractBatchOperation, AbstractIteratorOptions } from "abstract-level"
 // import ModuleError from "module-error"
 
-import debug from "debug"
-debug.formatters.h = bytesToHex
-debug.formatters.k = (key: Key) => (key ? bytesToHex(key) : "null")
-
-import { Key, Node, entryToNode, nodeToEntry, createEntryKey, parseNodeValue, parseNodeKey } from "./nodes.js"
+import { Key, Node } from "./nodes.js"
+import { getHeader, isHeaderEntry } from "./header.js"
+import { Builder } from "./builder.js"
+import { debug } from "./format.js"
+import { K, Q, HEADER_KEY } from "./constants.js"
 import {
 	assert,
 	equalArrays,
@@ -16,19 +15,29 @@ import {
 	hashEntry,
 	isSplit,
 	lessThan,
-	K,
-	Q,
 	getLeafAnchorHash,
 	encodingOptions,
+	entryToNode,
+	nodeToEntry,
+	createEntryKey,
+	parseNodeValue,
+	parseNodeKey,
+	Entry,
 } from "./utils.js"
-import { HEADER_KEY, getHeader, isHeaderEntry } from "./header.js"
-import { Builder } from "./builder.js"
 
 type Operation = AbstractBatchOperation<any, Uint8Array, Uint8Array>
 
 // we have enums at home
 const Result = { Update: 0, Delete: 1 } as const
 type Result = typeof Result[keyof typeof Result]
+
+export interface IteratorOptions {
+	reverse?: boolean
+	gt?: Uint8Array
+	gte?: Uint8Array
+	lt?: Uint8Array
+	lte?: Uint8Array
+}
 
 export class Tree<TFormat, KDefault, VDefault> {
 	private static indent = "  "
@@ -73,7 +82,7 @@ export class Tree<TFormat, KDefault, VDefault> {
 		public readonly db: AbstractLevel<TFormat, KDefault, VDefault>,
 		public readonly K: number,
 		public readonly Q: number,
-		private readonly print: (format: string, ...args: any[]) => void
+		private readonly formatter: (format: string, ...args: any[]) => void
 	) {}
 
 	public async close(): Promise<void> {
@@ -94,7 +103,33 @@ export class Tree<TFormat, KDefault, VDefault> {
 	}
 
 	private log(format: string, ...args: any[]) {
-		this.print("%s" + format, Tree.indent.repeat(this.depth), ...args)
+		this.formatter("%s" + format, Tree.indent.repeat(this.depth), ...args)
+	}
+
+	public async *iterator({ reverse, gt, gte, lt, lte }: IteratorOptions = {}): AsyncIterableIterator<Entry> {
+		const levelIteratorOptions: AbstractIteratorOptions<Uint8Array, Uint8Array> = { reverse, ...encodingOptions }
+
+		if (gte !== undefined) {
+			levelIteratorOptions.gte = createEntryKey(0, gte)
+		} else if (gt !== undefined) {
+			levelIteratorOptions.gt = createEntryKey(0, gt)
+		} else {
+			levelIteratorOptions.gt = createEntryKey(0, null)
+		}
+
+		if (lte !== undefined) {
+			levelIteratorOptions.lte = createEntryKey(0, lte)
+		} else if (lt !== undefined) {
+			levelIteratorOptions.lt = createEntryKey(0, lt)
+		} else {
+			levelIteratorOptions.lt = createEntryKey(1, null)
+		}
+
+		for await (const entry of this.db.iterator<Uint8Array, Uint8Array>(levelIteratorOptions)) {
+			const node = entryToNode(entry)
+			assert(node.level === 0 && node.key !== null && node.value !== undefined)
+			yield [node.key, node.value]
+		}
 	}
 
 	public async get(key: Uint8Array): Promise<Uint8Array | null> {
@@ -144,6 +179,25 @@ export class Tree<TFormat, KDefault, VDefault> {
 		}
 
 		return entryToNode([entryKey, entryValue], { K: this.K })
+	}
+
+	public async seek(level: number, key: Key): Promise<Node | null> {
+		const iter = this.db.iterator<Uint8Array, Uint8Array>({
+			gte: createEntryKey(level, key),
+			lt: createEntryKey(level + 1, null),
+			...encodingOptions,
+		})
+
+		try {
+			const entry = await iter.next()
+			if (entry !== undefined) {
+				return entryToNode(entry, { K: this.K })
+			} else {
+				return null
+			}
+		} finally {
+			await iter.close()
+		}
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
@@ -432,4 +486,8 @@ export class Tree<TFormat, KDefault, VDefault> {
 
 		return node
 	}
+
+	public print(hashSize = 4) {}
+
+	private printNode() {}
 }

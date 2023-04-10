@@ -13,14 +13,26 @@ export function getDB(t?: ExecutionContext) {
 	return db
 }
 
+export const defaultValue = Buffer.from([0xff, 0xff, 0xff, 0xff])
+
+export function getKey(i: number): Buffer {
+	const key = Buffer.alloc(4)
+	key.writeUint32BE(i)
+	return key
+}
+
 export function* iota(iota: number): Iterable<[Uint8Array, Uint8Array]> {
 	for (let i = 0; i < iota; i++) {
-		const keyBuffer = new ArrayBuffer(4)
-		const keyView = new DataView(keyBuffer)
-		keyView.setUint32(0, i)
-		const key = new Uint8Array(keyBuffer)
-		yield [key, new Uint8Array([0xff, 0xff, 0xff, 0xff])]
+		yield [getKey(i), Buffer.from(defaultValue)]
 	}
+}
+
+export async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+	const values: T[] = []
+	for await (const value of iter) {
+		values.push(value)
+	}
+	return values
 }
 
 export async function compareEntries(

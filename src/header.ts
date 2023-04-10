@@ -1,9 +1,5 @@
-import type { Entry } from "./nodes.js"
-import { K, Q, equalArrays } from "./utils.js"
-
-export const HEADER_KEY = new Uint8Array([0xff])
-
-export const OKRA_VERSION = 1
+import { Entry, equalArrays } from "./utils.js"
+import { K, Q, OKRA_VERSION, HEADER_KEY } from "./constants.js"
 
 export const isHeaderEntry = ([key]: Entry) => equalArrays(key, HEADER_KEY)
 

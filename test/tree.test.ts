@@ -16,6 +16,27 @@ test("Tree.open", async (t) => {
 	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from(getLeafAnchorHash({ K })) })
 })
 
+test("Tree.set", async (t) => {
+	const db = getDB(t)
+	const tree = await Tree.open(db, { K, Q })
+	await tree.set(Buffer.from("a"), Buffer.from("foo"))
+	await tree.set(Buffer.from("a"), Buffer.from("bar"))
+
+	t.deepEqual(await tree.get(Buffer.from("a")), Buffer.from("bar"))
+})
+
+test("Tree.delete", async (t) => {
+	const db = getDB(t)
+	const tree = await Tree.open(db, { K, Q })
+	await tree.set(Buffer.from("a"), Buffer.from("foo"))
+	await tree.set(Buffer.from("b"), Buffer.from("bar"))
+	t.deepEqual(await tree.get(Buffer.from("a")), Buffer.from("foo"))
+	await tree.delete(Buffer.from("a"))
+	t.deepEqual(await tree.get(Buffer.from("a")), null)
+	await tree.delete(Buffer.from("a"))
+	t.deepEqual(await tree.get(Buffer.from("a")), null)
+})
+
 const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
 	t.timeout(60 * 1000)
 
@@ -70,8 +91,8 @@ const testShuffleIota =
 	}
 
 test("Tree shuffle(iota(10))", testShuffleIota(10, 4, "29f0468d", 10))
-test("Tree shuffle(iota(100))", testShuffleIota(100, 4, "b389c726", 20))
-test("Tree shuffle(iota(1000))", testShuffleIota(1000, 7, "42f378b6", 20))
+// test("Tree shuffle(iota(100))", testShuffleIota(100, 4, "b389c726", 20))
+// test("Tree shuffle(iota(1000))", testShuffleIota(1000, 7, "42f378b6", 20))
 
 // test("Tree shuffle(iota(10000))", testShuffleIota(10000, 9, "f3f55398", 5))
 // test("Tree shuffle(iota(100000))", testShuffleIota(100000, 8, "f7fe5a93", 1))

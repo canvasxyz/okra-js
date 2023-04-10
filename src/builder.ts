@@ -1,12 +1,20 @@
-import { AbstractLevel } from "abstract-level"
+import type { AbstractLevel } from "abstract-level"
 
 import { blake3 } from "@noble/hashes/blake3"
 
-import { HEADER_KEY, getHeader } from "./header.js"
-import { Key, Node, createEntryKey, nodeToEntry } from "./nodes.js"
-import { K, Q, assert, hashEntry, isSplit, getLeafAnchorHash, encodingOptions } from "./utils.js"
-
-import { entryToNode } from "./nodes.js"
+import { getHeader } from "./header.js"
+import { Key, Node } from "./nodes.js"
+import { K, Q, HEADER_KEY } from "./constants.js"
+import {
+	assert,
+	hashEntry,
+	isSplit,
+	getLeafAnchorHash,
+	encodingOptions,
+	entryToNode,
+	createEntryKey,
+	nodeToEntry,
+} from "./utils.js"
 
 export class Builder<TFormat, KDefault, VDefault> {
 	public static async open<TFormat, KDefault, VDefault>(
