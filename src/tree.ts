@@ -24,7 +24,7 @@ import {
 	parseNodeKey,
 	Entry,
 } from "./utils.js"
-import { Driver } from "./sync.js"
+import { Driver } from "./driver.js"
 
 type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
 
