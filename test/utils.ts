@@ -3,7 +3,7 @@ import { MemoryLevel } from "memory-level"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 import Prando from "prando"
 
-import { Tree, Builder, hashEntry } from "@canvas-js/okra-level"
+import { Tree, Builder } from "@canvas-js/okra"
 
 export const encodingOptions = { keyEncoding: "view", valueEncoding: "view" }
 

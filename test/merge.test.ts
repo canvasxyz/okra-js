@@ -1,8 +1,6 @@
 import test, { ExecutionContext } from "ava"
 
-import { Tree } from "@canvas-js/okra-level"
-
-import { getDB, iota, getKey, compareEntries, random, initialize } from "./utils.js"
+import { getKey, compareEntries, random, initialize } from "./utils.js"
 
 const K = 16
 const Q = 4
@@ -50,9 +48,9 @@ test("testMerge(1000, 20, 20) x 10", async (t) => {
 	}
 })
 
-// test("testClone(10000, 100, 100) x 10", async (t) => {
+// test("testMerge(10000, 100, 100) x 10", async (t) => {
 // 	t.timeout(5 * 60 * 1000)
 // 	for (let i = 0; i < 10; i++) {
-// 		await testClone(t, `clone:10000:${i}`, 10000, 100, 100)
+// 		await testMerge(t, `merge:10000:${i}`, 10000, 100, 100)
 // 	}
 // })

@@ -1,6 +1,6 @@
 import test, { ExecutionContext } from "ava"
 
-import { Builder } from "@canvas-js/okra-level"
+import { Builder } from "@canvas-js/okra"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { getDB, iota } from "./utils.js"

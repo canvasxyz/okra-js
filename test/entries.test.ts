@@ -1,6 +1,6 @@
 import test from "ava"
 
-import { Tree, collect } from "@canvas-js/okra-level"
+import { Tree, collect } from "@canvas-js/okra"
 
 import { getDB, iota, getKey, defaultValue, initialize } from "./utils.js"
 

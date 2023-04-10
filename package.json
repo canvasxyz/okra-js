@@ -1,7 +1,7 @@
 {
 	"private": true,
-	"name": "@canvas-js/okra-level",
-	"description": "Pure JS okra implementation over an abstract-level interface",
+	"name": "@canvas-js/okra",
+	"description": "Pure JS merkle search tree over an abstract-level interface",
 	"version": "0.0.0",
 	"type": "module",
 	"main": "lib/index.js",

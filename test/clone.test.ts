@@ -48,9 +48,9 @@ test("testClone(1000, 20, 20) x 10", async (t) => {
 	}
 })
 
-// test("testClone(10000, 100, 100) x 10", async (t) => {
-// 	t.timeout(5 * 60 * 1000)
-// 	for (let i = 0; i < 10; i++) {
-// 		await testClone(t, `sync:10000:${i}`, 10000, 100, 100)
-// 	}
-// })
+test("testClone(10000, 100, 100) x 10", async (t) => {
+	t.timeout(5 * 60 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testClone(t, `sync:10000:${i}`, 10000, 100, 100)
+	}
+})

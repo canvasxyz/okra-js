@@ -1,7 +1,6 @@
 import test, { ExecutionContext } from "ava"
-import { text } from "node:stream/consumers"
 
-import { Delta, collect } from "@canvas-js/okra-level"
+import { Delta, collect } from "@canvas-js/okra"
 
 import { getKey, defaultValue, random, initialize } from "./utils.js"
 
@@ -61,9 +60,9 @@ test("testSync(1000, 20, 20) x 10", async (t) => {
 	}
 })
 
-// test("testSync(10000, 100, 100) x 10", async (t) => {
-// 	t.timeout(5 * 60 * 1000)
-// 	for (let i = 0; i < 10; i++) {
-// 		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
-// 	}
-// })
+test("testSync(10000, 100, 100) x 10", async (t) => {
+	t.timeout(5 * 60 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
+	}
+})

@@ -36,7 +36,7 @@ npm i @canvas-js/okra
 Import the `Tree` class and pass an [`abstract-level`](https://github.com/Level/abstract-level) instance into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
 
 ```ts
-import { Tree } from "@canvas-js/okra-level"
+import { Tree } from "@canvas-js/okra"
 import { MemoryLevel } from "memory-level"
 
 const encoder = new TextEncoder()

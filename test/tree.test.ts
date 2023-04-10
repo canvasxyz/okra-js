@@ -2,7 +2,7 @@ import test, { ExecutionContext } from "ava"
 
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { Builder, Tree, getLeafAnchorHash } from "@canvas-js/okra-level"
+import { Builder, Tree, getLeafAnchorHash } from "@canvas-js/okra"
 
 import { compareEntries, getDB, iota, shuffle, encodingOptions } from "./utils.js"
 
