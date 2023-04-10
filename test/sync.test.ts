@@ -1,11 +1,7 @@
-import { text } from "node:stream/consumers"
-
 import test, { ExecutionContext } from "ava"
 import Prando from "prando"
 
-import { bytesToHex as hex } from "@noble/hashes/utils"
-
-import { Delta, Tree, sync, print } from "@canvas-js/okra-level"
+import { Delta, Tree, sync } from "@canvas-js/okra-level"
 
 import { getDB, iota, getKey, defaultValue, collect } from "./utils.js"
 
@@ -61,25 +57,7 @@ async function testSync(
 		}
 	}
 
-	// console.log("SOURCE ----------------")
-	// console.log(await text(print(source)))
-	// console.log("TARGET ----------------")
-	// console.log(await text(print(target)))
-
-	// t.log(`expectedDelta: [ ${expectedDelta.map(getKey).map(bytesToHex).join(", ")} ]`)
-	// const expected = expectedDelta.map(getKey).map((key) => ({ key, source: defaultValue, target: null }))
-
-	expected.sort(({ key: a }, { key: b }) => Buffer.from(a).compare(Buffer.from(b)))
-
-	const deltas: Delta[] = []
-	for await (const delta of sync(source, target)) {
-		deltas.push(delta)
-		// if (delta.target === null) {
-		// 	deltas.push(delta)
-		// }
-	}
-
-	t.deepEqual(deltas, expected)
+	t.deepEqual(await collect(sync(source, target)), expected)
 }
 
 test("testSync(100, 10, 10) x 10", async (t) => {

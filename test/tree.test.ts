@@ -1,6 +1,6 @@
 import test, { ExecutionContext } from "ava"
 
-import { bytesToHex } from "@noble/hashes/utils"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { Builder, Tree, getLeafAnchorHash } from "@canvas-js/okra-level"
 
@@ -48,7 +48,7 @@ const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => a
 
 	const root = await tree.getRoot()
 	t.is(root.level, rootLevel)
-	t.is(bytesToHex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
+	t.is(hex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
 }
 
 test("Tree iota(10)", testIota(10, 4, "29f0468d"))
@@ -69,7 +69,7 @@ const testShuffleIota =
 
 		const root = await builder.finalize()
 		t.is(root.level, rootLevel)
-		t.is(bytesToHex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
+		t.is(hex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
 
 		for (let i = 0; i < iters; i++) {
 			t.log(`iteration ${i + 1}/${iters}`)

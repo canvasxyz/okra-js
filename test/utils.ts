@@ -1,6 +1,6 @@
 import type { ExecutionContext } from "ava"
 import { MemoryLevel } from "memory-level"
-import { bytesToHex } from "@noble/hashes/utils"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
 export const encodingOptions = { keyEncoding: "view", valueEncoding: "view" }
 
@@ -50,7 +50,7 @@ export async function compareEntries(
 	while (!entryA.done || !entryB.done) {
 		if (entryA.done && !entryB.done) {
 			const [keyB, valueB] = entryB.value
-			t.log(`[${bytesToHex(keyB)}] a: null, b: ${bytesToHex(valueB)} !`)
+			t.log(`[${hex(keyB)}] a: null, b: ${hex(valueB)} !`)
 			delta += 1
 			entryB = await iterB.next()
 			continue
@@ -58,7 +58,7 @@ export async function compareEntries(
 
 		if (!entryA.done && entryB.done) {
 			const [keyA, valueA] = entryA.value
-			t.log(`[${bytesToHex(keyA)}] a: ${bytesToHex(valueA)}, b: null !`)
+			t.log(`[${hex(keyA)}] a: ${hex(valueA)}, b: null !`)
 			delta += 1
 			entryA = await iterA.next()
 			continue
@@ -70,14 +70,14 @@ export async function compareEntries(
 
 			switch (Buffer.from(keyA).compare(Buffer.from(keyB))) {
 				case -1: {
-					t.log(`[${bytesToHex(keyA)}] a: ${bytesToHex(valueA)}, b: null`)
+					t.log(`[${hex(keyA)}] a: ${hex(valueA)}, b: null`)
 					entryA = await iterA.next()
 					delta += 1
 					continue
 				}
 				case 0: {
 					if (!Buffer.from(valueA).equals(Buffer.from(valueB))) {
-						t.log(`[${bytesToHex(keyA)}] a: ${bytesToHex(valueA)}, b: ${bytesToHex(valueB)}`)
+						t.log(`[${hex(keyA)}] a: ${hex(valueA)}, b: ${hex(valueB)}`)
 						delta += 1
 					}
 
@@ -86,7 +86,7 @@ export async function compareEntries(
 					continue
 				}
 				case 1: {
-					t.log(`[${bytesToHex(keyB)}] a: null, b: ${bytesToHex(valueB)}`)
+					t.log(`[${hex(keyB)}] a: null, b: ${hex(valueB)}`)
 					entryB = await iterB.next()
 					delta += 1
 					continue

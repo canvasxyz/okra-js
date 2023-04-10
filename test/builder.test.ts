@@ -1,7 +1,7 @@
 import test, { ExecutionContext } from "ava"
 
 import { Builder } from "@canvas-js/okra-level"
-import { bytesToHex } from "@noble/hashes/utils"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { getDB, iota } from "./utils.js"
 
@@ -16,7 +16,7 @@ const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => a
 
 	const root = await builder.finalize()
 	t.is(root.level, rootLevel)
-	t.is(bytesToHex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
+	t.is(hex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
 }
 
 test("build iota(0)", testIota(0, 0, "af1349b9"))

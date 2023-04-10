@@ -1,5 +1,5 @@
 import { blake3 } from "@noble/hashes/blake3"
-import { bytesToHex } from "@noble/hashes/utils"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { Key, Node } from "./nodes.js"
 import { K, Q } from "./constants.js"
@@ -22,7 +22,7 @@ export function isSplit(hash: Uint8Array, options: { Q?: number } = {}): boolean
 export function entryToNode([entryKey, entryValue]: Entry, options: { K?: number } = {}): Node {
 	const k = options.K ?? K
 	if (entryKey.length === 0 || entryValue.length < k) {
-		console.error([bytesToHex(entryKey), bytesToHex(entryValue)])
+		console.error([hex(entryKey), hex(entryValue)])
 		throw new Error("invalid entry")
 	}
 
