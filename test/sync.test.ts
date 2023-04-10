@@ -37,9 +37,9 @@ async function testSync(
 	const deletedFromSource = new Set<number>(random(`${seed}:source`, 0, count, deleteSource))
 	const deletedFromTarget = new Set<number>(random(`${seed}:target`, 0, count, deleteTarget))
 
-	const toKeys = (a: number[]) => a.sort((a, b) => a - b).map((i) => hex(getKey(i)))
-	t.log(seed, `deletedFromSource { ${toKeys([...deletedFromSource]).join(", ")} }`)
-	t.log(seed, `deletedFromTarget { ${toKeys([...deletedFromTarget]).join(", ")} }`)
+	// const toKeys = (a: number[]) => a.sort((a, b) => a - b).map((i) => hex(getKey(i)))
+	// t.log(seed, `deletedFromSource { ${toKeys([...deletedFromSource]).join(", ")} }`)
+	// t.log(seed, `deletedFromTarget { ${toKeys([...deletedFromTarget]).join(", ")} }`)
 
 	for (const i of deletedFromSource) {
 		const key = getKey(i)
@@ -61,10 +61,10 @@ async function testSync(
 		}
 	}
 
-	console.log("SOURCE ----------------")
-	console.log(await text(print(source)))
-	console.log("TARGET ----------------")
-	console.log(await text(print(target)))
+	// console.log("SOURCE ----------------")
+	// console.log(await text(print(source)))
+	// console.log("TARGET ----------------")
+	// console.log(await text(print(target)))
 
 	// t.log(`expectedDelta: [ ${expectedDelta.map(getKey).map(bytesToHex).join(", ")} ]`)
 	// const expected = expectedDelta.map(getKey).map((key) => ({ key, source: defaultValue, target: null }))
@@ -84,7 +84,7 @@ async function testSync(
 
 test("testSync(100, 10, 10) x 10", async (t) => {
 	t.timeout(2 * 60 * 1000)
-	for (let i = 0; i < 1; i++) {
+	for (let i = 0; i < 10; i++) {
 		await testSync(t, `sync:100:${i}`, 100, 10, 10)
 	}
 })
@@ -96,16 +96,16 @@ test("testSync(100, 10, 10) x 10", async (t) => {
 // 	}
 // })
 
-// test("testSync(1000, 20, 20) x 10", async (t) => {
-// 	t.timeout(2 * 60 * 1000)
-// 	for (let i = 0; i < 10; i++) {
-// 		await testSync(t, `sync:1000:${i}`, 1000, 20, 20)
-// 	}
-// })
+test("testSync(1000, 20, 20) x 10", async (t) => {
+	t.timeout(2 * 60 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testSync(t, `sync:1000:${i}`, 1000, 20, 20)
+	}
+})
 
-// test("testSync(10000, 100, 100) x 10", async (t) => {
-// 	t.timeout(2 * 60 * 1000)
-// 	for (let i = 0; i < 10; i++) {
-// 		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
-// 	}
-// })
+test("testSync(10000, 100, 100) x 10", async (t) => {
+	t.timeout(5 * 60 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
+	}
+})
