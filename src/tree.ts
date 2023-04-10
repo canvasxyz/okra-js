@@ -106,26 +106,33 @@ export class Tree<TFormat, KDefault, VDefault> {
 		this.formatter("%s" + format, Tree.indent.repeat(this.depth), ...args)
 	}
 
-	public async *iterator({ reverse, gt, gte, lt, lte }: IteratorOptions = {}): AsyncIterableIterator<Entry> {
+	/**
+	 * Iterate over a range of leaf key/value entries. Does not yield the leaf anchor node.
+	 * @param lowerBound *inclusive* lower bound (default null/no lower bound)
+	 * @param upperBound *exclusive* upper bound (default null/no upper bound)
+	 * @param options
+	 */
+	public async *entries(
+		lowerBound: Uint8Array | null = null,
+		upperBound: Uint8Array | null = null,
+		options: { reverse?: boolean } = {}
+	): AsyncIterableIterator<Entry> {
+		const reverse = options.reverse ?? false
 		const levelIteratorOptions: AbstractIteratorOptions<Uint8Array, Uint8Array> = { reverse, ...encodingOptions }
-
-		if (gte !== undefined) {
-			levelIteratorOptions.gte = createEntryKey(0, gte)
-		} else if (gt !== undefined) {
-			levelIteratorOptions.gt = createEntryKey(0, gt)
-		} else {
+		if (lowerBound === null) {
 			levelIteratorOptions.gt = createEntryKey(0, null)
-		}
-
-		if (lte !== undefined) {
-			levelIteratorOptions.lte = createEntryKey(0, lte)
-		} else if (lt !== undefined) {
-			levelIteratorOptions.lt = createEntryKey(0, lt)
 		} else {
-			levelIteratorOptions.lt = createEntryKey(1, null)
+			levelIteratorOptions.gte = createEntryKey(0, lowerBound)
 		}
 
-		for await (const entry of this.db.iterator<Uint8Array, Uint8Array>(levelIteratorOptions)) {
+		if (upperBound === null) {
+			levelIteratorOptions.lt = createEntryKey(1, null)
+		} else {
+			levelIteratorOptions.lt = createEntryKey(0, upperBound)
+		}
+
+		const iter = this.db.iterator<Uint8Array, Uint8Array>(levelIteratorOptions)
+		for await (const entry of iter) {
 			const node = entryToNode(entry)
 			assert(node.level === 0 && node.key !== null && node.value !== undefined)
 			yield [node.key, node.value]

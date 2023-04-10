@@ -11,7 +11,7 @@ import {
 	equalNodes,
 	lessThan,
 } from "./utils.js"
-import { LEAF_LIMIT } from "./constants.js"
+
 import { AbstractIterator } from "abstract-level"
 
 export interface Source {
@@ -62,7 +62,7 @@ class Driver<TFormat, KDefault, VDefault> {
 			if (this.leafCursor !== null) {
 				const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
 					gte: createEntryKey(0, this.leafCursor),
-					lt: LEAF_LIMIT,
+					lt: createEntryKey(1, null),
 					...encodingOptions,
 				})
 
@@ -202,7 +202,7 @@ class Driver<TFormat, KDefault, VDefault> {
 
 		const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
 			gte: createEntryKey(0, sourceNode.key),
-			lt: sourceLimit === null ? LEAF_LIMIT : createEntryKey(0, sourceLimit),
+			lt: sourceLimit === null ? createEntryKey(1, null) : createEntryKey(0, sourceLimit),
 			...encodingOptions,
 		})
 

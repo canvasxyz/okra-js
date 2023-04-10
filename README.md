@@ -75,16 +75,26 @@ const children = await tree.getChildren(1, null)
 
 ## API
 
+### Data types
+
 ```ts
+declare type Entry = [key: Uint8Array, value: Uint8Array]
+
 declare type Key = Uint8Array | null
 
+// value is undefined for level > 0 || key === null,
+// and a Uint8Array for level === 0 && key !== null.
 declare type Node = {
 	level: number
 	key: Key
 	hash: Uint8Array
 	value?: Uint8Array
 }
+```
 
+### Tree
+
+```ts
 declare interface IteratorOptions {
 	reverse?: boolean
 	gt?: Uint8Array
@@ -110,7 +120,11 @@ declare class Tree<TFormat, KDefault, VDefault> {
 	public get(key: Uint8Array): Promise<Uint8Array | null>
 	public set(key: Uint8Array, value: Uint8Array): Promise<void>
 	public delete(key: Uint8Array): Promise<void>
-	public iterator(options: IteratorOptions): AsyncIterable<[Uint8Array, Uint8Array]>
+	public entries(
+		lowerBound?: Uint8Array | null,
+		upperBound?: Uint8Array | null,
+		options?: { reverse?: boolean }
+	): AsyncIterableIterator<Entry>
 
 	// access internal merkle tree nodes
 	public getRoot(): Promise<Node>
@@ -120,4 +134,21 @@ declare class Tree<TFormat, KDefault, VDefault> {
 	// raze and rebuild the merkle tree from the leaves
 	public rebuild(): Promise<void>
 }
+```
+
+### Syncing
+
+```ts
+declare type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
+
+declare interface Source {
+	getRoot(): Promise<Node>
+	getNode(level: number, key: Key): Promise<Node | null>
+	getChildren(level: number, key: Key): Promise<Node[]>
+}
+
+declare function sync<TFormat, KDefault, VDefault>(
+	source: Source,
+	target: Tree<TFormat, KDefault, VDefault>
+): AsyncGenerator<Delta, void, undefined>
 ```
