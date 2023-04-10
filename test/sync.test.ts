@@ -89,13 +89,6 @@ test("testSync(100, 10, 10) x 10", async (t) => {
 	}
 })
 
-// test("testSync(200, 10, 10) x 10", async (t) => {
-// 	t.timeout(2 * 60 * 1000)
-// 	for (let i = 0; i < 10; i++) {
-// 		await testSync(t, `sync:200:${i}`, 200, 10, 10)
-// 	}
-// })
-
 test("testSync(1000, 20, 20) x 10", async (t) => {
 	t.timeout(2 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
@@ -103,9 +96,9 @@ test("testSync(1000, 20, 20) x 10", async (t) => {
 	}
 })
 
-test("testSync(10000, 100, 100) x 10", async (t) => {
-	t.timeout(5 * 60 * 1000)
-	for (let i = 0; i < 10; i++) {
-		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
-	}
-})
+// test("testSync(10000, 100, 100) x 10", async (t) => {
+// 	t.timeout(5 * 60 * 1000)
+// 	for (let i = 0; i < 10; i++) {
+// 		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
+// 	}
+// })

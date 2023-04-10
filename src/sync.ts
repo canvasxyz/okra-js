@@ -18,7 +18,6 @@ export interface Source {
 	getRoot(): Promise<Node>
 	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
-	seek(level: number, key: Key): Promise<Node | null>
 }
 
 export type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
@@ -115,7 +114,7 @@ class Driver<TFormat, KDefault, VDefault> {
 
 		try {
 			this.log("source node: %n", sourceNode)
-			const targetNode = await this.target.seek(sourceNode.level, sourceNode.key)
+			const targetNode = await this.target.getNode(sourceNode.level, sourceNode.key)
 			if (targetNode !== null) {
 				this.log("target node: %n", targetNode)
 			} else {
@@ -142,9 +141,6 @@ class Driver<TFormat, KDefault, VDefault> {
 				this.log("set leaf cursor to %k", this.leafCursor)
 			}
 
-			// I now expect this to break
-			// assert(equalKeys(this.leafCursor, sourceNode.key))
-
 			if (targetNode !== null && equalNodes(sourceNode, targetNode)) {
 				this.log("skipping subtree")
 
@@ -170,17 +166,17 @@ class Driver<TFormat, KDefault, VDefault> {
 					const sourceChildLimit = i === sourceChildren.length - 1 ? sourceLimit : sourceChildren[i + 1].key
 					yield* this.syncNode(sourceChild, sourceChildLimit)
 				}
-			} else if (targetNode === null) {
-				const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
-				for (const sourceLeaf of sourceChildren) {
-					if (sourceLeaf.key === null) {
-						continue
-					}
+				// } else if (targetNode === null) {
+				// 	const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
+				// 	for (const sourceLeaf of sourceChildren) {
+				// 		if (sourceLeaf.key === null) {
+				// 			continue
+				// 		}
 
-					assert(sourceLeaf.level === 0 && sourceLeaf.value !== undefined)
-					yield { key: sourceLeaf.key, source: sourceLeaf.value, target: null }
-				}
-			} else if (sourceNode.level === 1) {
+				// 		assert(sourceLeaf.level === 0 && sourceLeaf.value !== undefined)
+				// 		yield { key: sourceLeaf.key, source: sourceLeaf.value, target: null }
+				// 	}
+			} else {
 				yield* this.syncLeaf(sourceNode, sourceLimit)
 			}
 		} finally {

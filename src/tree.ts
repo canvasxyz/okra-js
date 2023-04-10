@@ -181,25 +181,6 @@ export class Tree<TFormat, KDefault, VDefault> {
 		return entryToNode([entryKey, entryValue], { K: this.K })
 	}
 
-	public async seek(level: number, key: Key): Promise<Node | null> {
-		const iter = this.db.iterator<Uint8Array, Uint8Array>({
-			gte: createEntryKey(level, key),
-			lt: createEntryKey(level + 1, null),
-			...encodingOptions,
-		})
-
-		try {
-			const entry = await iter.next()
-			if (entry !== undefined) {
-				return entryToNode(entry, { K: this.K })
-			} else {
-				return null
-			}
-		} finally {
-			await iter.close()
-		}
-	}
-
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
 		this.log(`set(%h, %h)`, key, value)
 		await this.apply({ type: "put", key, value })

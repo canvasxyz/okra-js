@@ -18,7 +18,7 @@ npm i @canvas-js/okra-level
 
 Import the `Tree` class and pass an [`abstract-level`](https://github.com/Level/abstract-level) instance into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
 
-The tree can be used as a normal key/value store with `.get`, `.set`, and `.delete` methods. In addition, you can access the internal merkle tree nodes using `getRoot`, `getNode`, `getChildren`, and `seek` methods.
+The tree can be used as a normal key/value store with `.get`, `.set`, and `.delete` methods. In addition, you can access the internal merkle tree nodes using `getRoot`, `getNode`, and `getChildren` methods.
 
 Setting or deleting an entry translates into several `put` and `del` operations in the underlying `abstract-level` database. The `abstract-level` interface only offers "transactions" in the form of batched operations, which isn't suitable for dynamic internal tree maintenance. As a result, `.set` and `.delete` have weak consistency properties: if a underlying `put` or `del` fails, it will leave the tree in a corrupted state. If this happens, it can be corrected with a call to `await Tree.rebuild()`.
 
@@ -116,7 +116,6 @@ declare class Tree<TFormat, KDefault, VDefault> {
 	public getRoot(): Promise<Node>
 	public getNode(level: number, key: Key): Promise<Node | null>
 	public getChildren(level: number, key: Key): Promise<Node[]>
-	public seek(level: number, key: Key): Promise<Node | null>
 
 	// raze and rebuild the merkle tree from the leaves
 	public rebuild(): Promise<void>
