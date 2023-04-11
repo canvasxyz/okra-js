@@ -12,6 +12,7 @@ Pure JS merkle search tree over an [`abstract-level`](https://github.com/Level/a
   - [Iterating over ranges of entries](#iterating-over-ranges-of-entries)
   - [Exposing the internal merkle search tree](#exposing-the-internal-merkle-search-tree)
   - [Syncing with a remote source](#syncing-with-a-remote-source)
+  - [`pull`, `copy`, and `merge` patterns](#pull-copy-and-merge-patterns)
   - [Debugging](#debugging)
 - [Testing](#testing)
 - [API](#api)
@@ -22,9 +23,9 @@ Pure JS merkle search tree over an [`abstract-level`](https://github.com/Level/a
 
 okra is a key/value store augmented with a _merkle search tree_ index. You can use it like a regular key/value store, with `get`/`set`/`delete` methods and an `entries()` iterator. The merkle search tree enables **efficient syncing** by iterating over the missing, extra, or conflicting entries between a local and remote okra database.
 
-This can be used
+okra can be used as a **natural persistence layer for operation-based CRDTs**, directly as a persistent state-based CRDT map with efficient merging, "rsync for key/value stores", and much more. Read through the examples in the usage section to see it in action.
 
-`okra-js` is one of two reference implementations - [the other](https://github.com/canvasxyz/okra) is written in Zig and can be installed as a native NodeJS module.
+`@canvas-js/okra` is one of two compatible reference implementations. The other is [`@canvas-js/okra-node`](https://github.com/canvasxyz/okra), which is written in Zig and can be installed as a native NodeJS module.
 
 ## Install
 
@@ -34,15 +35,15 @@ npm i @canvas-js/okra
 
 ## Usage
 
+okra is designed as a thin wrapper around an existing key/value store; the specification is documented in the main [canvasxyz/okra](https://github.com/canvasxyz/okra) repo. This package exports a `Tree` class that can wrap any implementation of the [abstract-level](https://github.com/Level/abstract-level) interface. abstract-level is a project that grew out of leveldb and its extended universe; it now houses a family of API-compatible key/value stores including [memory-level](https://github.com/Level/memory-level) (totally in-memory), [classic-level](https://github.com/Level/classic-level) (backed by LevelDB), and [browser-level](https://github.com/Level/browser-level), backed by IndexedDB. The examples here all use memory-level, but okra works with any of them.
+
 ### Opening a tree
 
-Import the `Tree` class and pass an [`abstract-level`](https://github.com/Level/abstract-level) instance into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
+Import the `Tree` class and pass an abstract-level instance into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
 
 ```ts
 import { Tree } from "@canvas-js/okra"
 import { MemoryLevel } from "memory-level"
-
-const encoder = new TextEncoder()
 
 const tree = await Tree.open(new MemoryLevel())
 ```
@@ -55,11 +56,13 @@ The tree can be used as a normal key/value store with `.get`, `.set`, and `.dele
 
 Setting or deleting an entry translates into several `put` and `del` operations in the underlying `abstract-level` database. The `abstract-level` interface only offers "transactions" in the form of batched operations, which isn't suitable for dynamic internal tree maintenance. As a result, `.set` and `.delete` have weak consistency properties: if a underlying `put` or `del` fails, it will leave the tree in a corrupted state. If this happens, it can be corrected with a call to `await tree.rebuild()`.
 
-If atomic and consistent transactions are important to you, consider the native NodeJS binding for the Zig implementation of okra, which is fully ACID compliant and supports reads and writes concurrently.
+If atomic and consistent transactions are important to you, consider using the native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra), which has fully ACID transactions and a multi-reader single-writer concurrency model.
 
 You can override the default internal hash size and target fanout degree by passing `{ K: number, Q: number }` into `Tree.open`, although this is discouraged.
 
 ```js
+const encoder = new TextEncoder()
+
 await tree.set(encoder.encode("a"), encoder.encode("foo"))
 await tree.set(encoder.encode("b"), encoder.encode("bar"))
 await tree.set(encoder.encode("c"), encoder.encode("baz"))
@@ -97,7 +100,7 @@ await collect(tree.entries(encoder.encode("b"), encoder.encode("c")))
 
 ### Exposing the internal merkle search tree
 
-You can access the internal merkle tree nodes using `getRoot`, `getNode`, and `getChildren` methods. These are the methods that must be accessible to other okra databases, such as over an HTTP API. okra-js itself is transport-agnostic.
+You can access the internal merkle tree nodes using the `getRoot` and `getChildren` methods. These are the methods that must be accessible to other okra databases, such as over an HTTP API. okra-js itself is transport-agnostic.
 
 ```ts
 await tree.getRoot()
@@ -135,7 +138,7 @@ Note that the leaf anchor node at `(level = 0, key = null)` doesn't have a value
 
 ### Syncing with a remote source
 
-First, you must have an instance of the `Source` interface for the remote okra database you want to sync with. If you're exposing the merkle tree via an HTTP API, you'll have to write a little client implementing `Source` that uses `fetch`, or whatever is appropriate for the transport.
+First, you must have an instance of the `Source` interface for the remote okra database you want to sync with. If you're exposing the merkle tree via an HTTP API, you'll have to write a little client implementing `Source` that uses `fetch`, or whatever is appropriate for your transport.
 
 ```ts
 interface Source {
@@ -144,14 +147,16 @@ interface Source {
 }
 ```
 
-`Tree` itself implements `Source`, so we can easily demonstrate the sync methods using two local databases:
+`Tree` itself implements `Source`, so we can easily demonstrate the sync methods using two local databases.
 
 ```ts
 import { Tree, collect } from "@canvas-js/okra"
 
+// create two in-memory trees
 const source = await Tree.open(new MemoryLevel())
 const target = await Tree.open(new MemoryLevel())
 
+// initialize them with the same 256 random entries
 for (let i = 0; i < 256; i++) {
 	const key = new Uint8Array([i])
 	await source.set(key, sha256(key))
@@ -189,19 +194,19 @@ await collect(target.delta(source))
 // ]
 ```
 
-`Tree.prototype.delta` is the lowest-level form of syncing. It is an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a Uint8Array. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
+`Tree.prototype.delta` is the lowest-level form of syncing. It is an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a `Uint8Array`. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
 
-> ⚠️ Syncing **will fail if the source is concurrently modified**. This is because abstract-level does not support proper snapshots and transactions.
+> ⚠️ Syncing **will fail if the source is concurrently modified**. This is because abstract-level does not support proper snapshots with transactions.
 
 This means that your implementation of sync transport will need some concept of "sessions" so that okra-js sources can queue pending calls to `.set` and `.delete` when a session is active, and resume handling them when the session ends. This could be done with an async queue like[ `p-queue`](https://github.com/sindresorhus/p-queue) or using locks from e.g. the [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API). In the future, okra-js may enforce locking itself, but for now it is left to the user.
 
-However, due to the specific behavior of the sync algorithm, the **target tree _can_ be modified while syncing**. You can safely `await tree.set(...)` and `await tree.delete(...)` inside a `for await (const delta of tree.delta(source)) { ... }` loop.
+However, thanks to the specific behavior of the sync algorithm, the **target tree _can_ be modified while syncing**. You can safely `await tree.set(...)` and `await tree.delete(...)` inside a `for await (const delta of tree.delta(source)) { ... }` loop.
 
-The Zig implementation and its NodeJS bindings `@canvas-js/okra-node` support snapshots and thus can process a read-write transaction with abitrarily many concurrent read-only transactions.
+The Zig implementation and its NodeJS bindings support snapshots and thus can process a read-write transaction with abitrarily many concurrent read-only transactions.
 
 ### `pull`, `copy`, and `merge` patterns
 
-Calling `tree.delta(source)` does not automatically modify `tree` - it only iterates over the differences. Taking action in response to each delta is up to you! There are several different ways that you might want to use the deltas, three of which are implemented as exmples and convenience methods.
+Calling `tree.delta(source)` does not automatically modify `tree` - it only iterates over the differences. Taking action in response to each delta is up to you! There are several different ways that you might want to use the deltas, three of which are implemented as exmples.
 
 #### `Tree.prototype.pull`
 
