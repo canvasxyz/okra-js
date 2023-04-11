@@ -142,8 +142,8 @@ First, you must have an instance of the `Source` interface for the remote okra d
 
 ```ts
 interface Source {
-	getRoot(): Promise<Node>
-	getChildren(level: number, key: Key): Promise<Node[]>
+  getRoot(): Promise<Node>
+  getChildren(level: number, key: Key): Promise<Node[]>
 }
 ```
 
@@ -158,9 +158,9 @@ const target = await Tree.open(new MemoryLevel())
 
 // initialize them with the same 256 random entries
 for (let i = 0; i < 256; i++) {
-	const key = new Uint8Array([i])
-	await source.set(key, sha256(key))
-	await target.set(key, sha256(key))
+  const key = new Uint8Array([i])
+  await source.set(key, sha256(key))
+  await target.set(key, sha256(key))
 }
 
 // delete one entry from source
@@ -216,18 +216,18 @@ One way of looking at `pull` is that it implements a grow-only set with an effic
 
 ```ts
 class Tree {
-	// ...
-	public async pull(source: Source): Promise<void> {
-		for await (const delta of this.delta(source)) {
-			if (delta.source === null) {
-				continue
-			} else if (delta.target === null) {
-				await this.set(delta.key, delta.source)
-			} else {
-				throw new ModuleError("Conflict", { code: "OKRA_CONFLICT" })
-			}
-		}
-	}
+  // ...
+  public async pull(source: Source): Promise<void> {
+    for await (const delta of this.delta(source)) {
+      if (delta.source === null) {
+        continue
+      } else if (delta.target === null) {
+        await this.set(delta.key, delta.source)
+      } else {
+        throw new ModuleError("Conflict", { code: "OKRA_CONFLICT" })
+      }
+    }
+  }
 }
 ```
 
@@ -237,16 +237,16 @@ Call `await tree.copy(source)` to _copy the remote source_, deleting any local e
 
 ```ts
 class Tree {
-	// ...
-	public async copy(source: Source): Promise<void> {
-		for await (const delta of this.delta(source)) {
-			if (delta.source === null) {
-				await this.delete(delta.key)
-			} else {
-				await this.set(delta.key, delta.source)
-			}
-		}
-	}
+  // ...
+  public async copy(source: Source): Promise<void> {
+    for await (const delta of this.delta(source)) {
+      if (delta.source === null) {
+        await this.delete(delta.key)
+      } else {
+        await this.set(delta.key, delta.source)
+      }
+    }
+  }
 }
 ```
 
@@ -264,22 +264,22 @@ The merge method is useful for implementing **persistent state-based CRDT** syst
 
 ```ts
 class Tree {
-	// ...
-	public async merge(
-		source: Source,
-		arbiter: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
-	): Promise<void> {
-		for await (const delta of this.delta(source)) {
-			if (delta.source === null) {
-				continue
-			} else if (delta.target === null) {
-				await this.set(delta.key, delta.source)
-			} else {
-				const value = await mergeValues(delta.key, delta.source, delta.target)
-				await this.set(delta.key, value)
-			}
-		}
-	}
+  // ...
+  public async merge(
+    source: Source,
+    arbiter: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+  ): Promise<void> {
+    for await (const delta of this.delta(source)) {
+      if (delta.source === null) {
+        continue
+      } else if (delta.target === null) {
+        await this.set(delta.key, delta.source)
+      } else {
+        const value = await mergeValues(delta.key, delta.source, delta.target)
+        await this.set(delta.key, value)
+      }
+    }
+  }
 }
 ```
 
@@ -301,8 +301,8 @@ console.log(await text(tree.print())) // hash size defaults to 4 bytes for reada
 
 const bigTree = await Tree.open(new MemoryLevel())
 for (let i = 0; i < 256; i++) {
-	const key = new Uint8Array([i])
-	await bigTree.set(key, sha256(key))
+  const key = new Uint8Array([i])
+  await bigTree.set(key, sha256(key))
 }
 
 console.log(await text(bigTree.print()))
@@ -340,18 +340,18 @@ declare type Key = Uint8Array | null
 // value is undefined for level > 0 || key === null,
 // and a Uint8Array for level === 0 && key !== null.
 declare type Node = {
-	level: number
-	key: Key
-	hash: Uint8Array
-	value?: Uint8Array
+  level: number
+  key: Key
+  hash: Uint8Array
+  value?: Uint8Array
 }
 
 // source and target are never both null.
 declare type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
 
 declare interface Source {
-	getRoot(): Promise<Node>
-	getChildren(level: number, key: Key): Promise<Node[]>
+  getRoot(): Promise<Node>
+  getChildren(level: number, key: Key): Promise<Node[]>
 }
 
 /**
@@ -360,58 +360,58 @@ declare interface Source {
  * compiler should be able to infer the rest.
  */
 declare class Tree<TFormat = any, KDefault = any, VDefault = any> implements Source {
-	public readonly db: AbstractLevel<TFormat, KDefault, VDefault>
-	public readonly K: number
-	public readonly Q: number
+  public readonly db: AbstractLevel<TFormat, KDefault, VDefault>
+  public readonly K: number
+  public readonly Q: number
 
-	public static open<TFormat, KDefault, VDefault>(
-		db: AbstractLevel<TFormat, KDefault, VDefault>,
-		options?: { K?: number; Q?: number }
-	): Promise<Tree<TFormat, KDefault, VDefault>>
+  public static open<TFormat, KDefault, VDefault>(
+    db: AbstractLevel<TFormat, KDefault, VDefault>,
+    options?: { K?: number; Q?: number }
+  ): Promise<Tree<TFormat, KDefault, VDefault>>
 
-	// closes the underlying AbstractLevel database
-	public close(): Promise<void>
+  // closes the underlying AbstractLevel database
+  public close(): Promise<void>
 
-	// external key/value interface
-	public get(key: Uint8Array): Promise<Uint8Array | null>
-	public set(key: Uint8Array, value: Uint8Array): Promise<void>
-	public delete(key: Uint8Array): Promise<void>
-	public entries(
-		lowerBound?: Uint8Array | null,
-		upperBound?: Uint8Array | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<Entry>
+  // external key/value interface
+  public get(key: Uint8Array): Promise<Uint8Array | null>
+  public set(key: Uint8Array, value: Uint8Array): Promise<void>
+  public delete(key: Uint8Array): Promise<void>
+  public entries(
+    lowerBound?: Uint8Array | null,
+    upperBound?: Uint8Array | null,
+    options?: { reverse?: boolean }
+  ): AsyncIterableIterator<Entry>
 
-	// access internal merkle tree nodes
-	public getRoot(): Promise<Node>
-	public getNode(level: number, key: Key): Promise<Node | null>
-	public getChildren(level: number, key: Key): Promise<Node[]>
+  // access internal merkle tree nodes
+  public getRoot(): Promise<Node>
+  public getNode(level: number, key: Key): Promise<Node | null>
+  public getChildren(level: number, key: Key): Promise<Node[]>
 
-	/**
-	 * Iterate over the differences between the entries in the local tree and a remote source.
-	 */
-	public delta(source: Source): AsyncGenerator<Delta, void, undefined>
+  /**
+   * Iterate over the differences between the entries in the local tree and a remote source.
+   */
+  public delta(source: Source): AsyncGenerator<Delta, void, undefined>
 
-	public pull(source: Source): Promise<void>
+  public pull(source: Source): Promise<void>
 
-	public copy(source: Source): Promise<void>
+  public copy(source: Source): Promise<void>
 
-	public merge(
-		source: Source,
-		mergeValues: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
-	): Promise<void>
+  public merge(
+    source: Source,
+    mergeValues: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+  ): Promise<void>
 
-	/**
-	 * Raze and rebuild the merkle tree from the leaves.
-	 * @returns the new root node
-	 */
-	public rebuild(): Promise<void>
+  /**
+   * Raze and rebuild the merkle tree from the leaves.
+   * @returns the new root node
+   */
+  public rebuild(): Promise<void>
 
-	/**
-	 * Pretty-print the tree structure to a utf-8 stream.
-	 * Consume with a TextDecoderStream or async iterable sink.
-	 */
-	public async *print(): AsyncIterableIterator<Uint8Array>
+  /**
+   * Pretty-print the tree structure to a utf-8 stream.
+   * Consume with a TextDecoderStream or async iterable sink.
+   */
+  public async *print(): AsyncIterableIterator<Uint8Array>
 }
 ```
 
