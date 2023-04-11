@@ -19,6 +19,10 @@
 		"clean": "tsc --build tsconfig.json test/tsconfig.json --clean",
 		"test": "ava"
 	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/canvasxyz/okra-js.git"
+	},
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"devDependencies": {
