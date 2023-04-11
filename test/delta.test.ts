@@ -2,19 +2,22 @@ import test, { ExecutionContext } from "ava"
 
 import { Delta, collect } from "@canvas-js/okra"
 
-import { getKey, defaultValue, random, initialize } from "./utils.js"
+import { getKey, defaultValue, random, initialize, iota } from "./utils.js"
 
 const K = 16
 const Q = 4
 
-async function testSync(
+async function testDelta(
 	t: ExecutionContext,
 	seed: string,
 	count: number,
 	deleteSource: number,
 	deleteTarget: number
 ): Promise<void> {
-	const [source, target] = await Promise.all([initialize(t, count, { K, Q }), initialize(t, count, { K, Q })])
+	const [source, target] = await Promise.all([
+		initialize(t, iota(count), { K, Q }),
+		initialize(t, iota(count), { K, Q }),
+	])
 
 	const expected: Delta[] = []
 
@@ -43,26 +46,26 @@ async function testSync(
 
 	expected.sort(({ key: a }, { key: b }) => Buffer.from(a).compare(Buffer.from(b)))
 
-	t.deepEqual(await collect(target.sync(source)), expected)
+	t.deepEqual(await collect(target.delta(source)), expected)
 }
 
-test("testSync(100, 10, 10) x 10", async (t) => {
+test("testDelta(100, 10, 10) x 10", async (t) => {
 	t.timeout(2 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
-		await testSync(t, `sync:100:${i}`, 100, 10, 10)
+		await testDelta(t, `delta:100:${i}`, 100, 10, 10)
 	}
 })
 
-test("testSync(1000, 20, 20) x 10", async (t) => {
+test("testDelta(1000, 20, 20) x 10", async (t) => {
 	t.timeout(2 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
-		await testSync(t, `sync:1000:${i}`, 1000, 20, 20)
+		await testDelta(t, `delta:1000:${i}`, 1000, 20, 20)
 	}
 })
 
-test("testSync(10000, 100, 100) x 10", async (t) => {
+test("testDelta(10000, 100, 100) x 10", async (t) => {
 	t.timeout(5 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
-		await testSync(t, `sync:10000:${i}`, 10000, 100, 100)
+		await testDelta(t, `delta:10000:${i}`, 10000, 100, 100)
 	}
 })

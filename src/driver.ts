@@ -27,7 +27,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 		this.formatter("%s" + format, Driver.indent.repeat(this.depth), ...args)
 	}
 
-	public async *sync(): AsyncGenerator<Delta, void, undefined> {
+	public async *delta(): AsyncGenerator<Delta, void, undefined> {
 		const sourceRoot = await this.source.getRoot()
 		const targetRoot = await this.target.getRoot()
 
@@ -42,7 +42,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 			this.log("source and target roots are equal")
 			return
 		} else {
-			yield* this.syncRoot(targetRoot, sourceRoot, null)
+			yield* this.deltaRoot(targetRoot, sourceRoot, null)
 			if (this.leafCursor !== null) {
 				const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
 					gte: createEntryKey(0, this.leafCursor),
@@ -59,7 +59,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 		}
 	}
 
-	async *syncRoot(targetRoot: Node, sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
+	async *deltaRoot(targetRoot: Node, sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncRoot")
 		this.depth += 1
 
@@ -81,18 +81,18 @@ export class Driver<TFormat, KDefault, VDefault> {
 				} else {
 					for (const [i, sourceChild] of sourceChildren.entries()) {
 						const sourceChildLimit = i === sourceChildren.length - 1 ? sourceLimit : sourceChildren[i + 1].key
-						yield* this.syncRoot(targetRoot, sourceChild, sourceChildLimit)
+						yield* this.deltaRoot(targetRoot, sourceChild, sourceChildLimit)
 					}
 				}
 			} else {
-				yield* this.syncNode(sourceNode, sourceLimit)
+				yield* this.deltaNode(sourceNode, sourceLimit)
 			}
 		} finally {
 			this.depth -= 1
 		}
 	}
 
-	async *syncNode(sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
+	async *deltaNode(sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncNode")
 		this.depth += 1
 
@@ -148,7 +148,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 				const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
 				for (const [i, sourceChild] of sourceChildren.entries()) {
 					const sourceChildLimit = i === sourceChildren.length - 1 ? sourceLimit : sourceChildren[i + 1].key
-					yield* this.syncNode(sourceChild, sourceChildLimit)
+					yield* this.deltaNode(sourceChild, sourceChildLimit)
 				}
 				// } else if (targetNode === null) {
 				// 	const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
@@ -161,7 +161,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 				// 		yield { key: sourceLeaf.key, source: sourceLeaf.value, target: null }
 				// 	}
 			} else {
-				yield* this.syncLeaf(sourceNode, sourceLimit)
+				yield* this.deltaLeaf(sourceNode, sourceLimit)
 			}
 		} finally {
 			this.depth -= 1
@@ -177,7 +177,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 		}
 	}
 
-	private async *syncLeaf(sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
+	private async *deltaLeaf(sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
 		assert(sourceNode.level === 1)
 
 		const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)

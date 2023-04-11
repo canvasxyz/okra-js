@@ -9,7 +9,6 @@ export type Node = {
 
 export interface Source {
 	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
 }
 

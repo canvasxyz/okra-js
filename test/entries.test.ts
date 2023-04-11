@@ -1,15 +1,15 @@
 import test from "ava"
 
-import { Tree, collect } from "@canvas-js/okra"
+import { collect } from "@canvas-js/okra"
 
-import { getDB, iota, getKey, defaultValue, initialize } from "./utils.js"
+import { iota, getKey, defaultValue, initialize } from "./utils.js"
 
 const K = 16
 const Q = 4
 
 test("Tree.entries", async (t) => {
 	const count = 10
-	const tree = await initialize(t, 10, { K, Q })
+	const tree = await initialize(t, iota(10), { K, Q })
 
 	t.deepEqual(await collect(tree.entries()), [...iota(count)])
 	t.deepEqual(await collect(tree.entries(null, null, { reverse: true })), [...iota(count)].reverse())

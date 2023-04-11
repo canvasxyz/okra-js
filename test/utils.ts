@@ -16,10 +16,14 @@ export function getDB(t?: ExecutionContext): MemoryLevel<Uint8Array, Uint8Array>
 	return db
 }
 
-export async function initialize(t: ExecutionContext, count: number, options: { K: number; Q: number }): Promise<Tree> {
+export async function initialize(
+	t: ExecutionContext,
+	entries: Iterable<[Uint8Array, Uint8Array]>,
+	options: { K: number; Q: number } = { K: 16, Q: 4 }
+): Promise<Tree> {
 	const db = getDB(t)
 	const builder = await Builder.open(db, options)
-	for (const [key, value] of iota(count)) {
+	for (const [key, value] of entries) {
 		await builder.set(key, value)
 	}
 	await builder.finalize()
@@ -34,9 +38,12 @@ export function getKey(i: number): Buffer {
 	return key
 }
 
-export function* iota(count: number): Iterable<[Uint8Array, Uint8Array]> {
+export function* iota(
+	count: number,
+	getValue: (i: number) => Uint8Array = (i) => Buffer.from(defaultValue)
+): Iterable<[Uint8Array, Uint8Array]> {
 	for (let i = 0; i < count; i++) {
-		yield [getKey(i), Buffer.from(defaultValue)]
+		yield [getKey(i), getValue(i)]
 	}
 }
 

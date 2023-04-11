@@ -12,7 +12,7 @@ async function testPull(
 	deleteA: number,
 	deleteB: number
 ): Promise<void> {
-	const [a, b] = await Promise.all([initialize(t, count, { K, Q }), initialize(t, count, { K, Q })])
+	const [a, b] = await Promise.all([initialize(t, iota(count), { K, Q }), initialize(t, iota(count), { K, Q })])
 
 	for (const [key, value] of iota(count)) {
 		await Promise.all([a.set(key, value), b.set(key, value)])
@@ -26,23 +26,8 @@ async function testPull(
 		await b.delete(getKey(i))
 	}
 
-	for await (const delta of b.sync(a)) {
-		if (delta.source === null) {
-			continue
-		} else {
-			t.is(delta.target, null)
-			await b.set(delta.key, delta.source)
-		}
-	}
-
-	for await (const delta of a.sync(b)) {
-		if (delta.source === null) {
-			continue
-		} else {
-			t.is(delta.target, null)
-			await a.set(delta.key, delta.source)
-		}
-	}
+	await b.pull(a)
+	await a.pull(b)
 
 	const delta = await compareEntries(t, b.entries(), a.entries())
 	t.is(delta, 0)
@@ -62,9 +47,9 @@ test("testPull(1000, 20, 20) x 10", async (t) => {
 	}
 })
 
-// test("testPull(10000, 100, 100) x 10", async (t) => {
-// 	t.timeout(5 * 60 * 1000)
-// 	for (let i = 0; i < 10; i++) {
-// 		await testPull(t, `pull:10000:${i}`, 10000, 100, 100)
-// 	}
-// })
+test("testPull(10000, 100, 100) x 10", async (t) => {
+	t.timeout(5 * 60 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testPull(t, `pull:10000:${i}`, 10000, 100, 100)
+	}
+})

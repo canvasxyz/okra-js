@@ -1,6 +1,6 @@
 # okra-js
 
-Pure JS okra implementation over an [`abstract-level`](https://github.com/Level/abstract-level) interface.
+Pure JS merkle search tree over an [`abstract-level`](https://github.com/Level/abstract-level) interface.
 
 ## Table of Contents
 
@@ -11,6 +11,7 @@ Pure JS okra implementation over an [`abstract-level`](https://github.com/Level/
   - [Getting, setting, and deleting entries](#getting-setting-and-deleting-entries)
   - [Iterating over ranges of entries](#iterating-over-ranges-of-entries)
   - [Exposing the internal merkle search tree](#exposing-the-internal-merkle-search-tree)
+  - [Syncing with a remote source](#syncing-with-a-remote-source)
   - [Debugging](#debugging)
 - [Testing](#testing)
 - [API](#api)
@@ -19,7 +20,9 @@ Pure JS okra implementation over an [`abstract-level`](https://github.com/Level/
 
 ## Background
 
-okra is a key/value store augmented with a _merkle search tree_ index. You can use it like a regular key/value store, with `get`/`set`/`delete` methods and an `entries()` iterator. The merkle search tree enables **efficient syncing** by iterating over the missing, extra, or conflicting entries between a local and remote okra database. This can be used
+okra is a key/value store augmented with a _merkle search tree_ index. You can use it like a regular key/value store, with `get`/`set`/`delete` methods and an `entries()` iterator. The merkle search tree enables **efficient syncing** by iterating over the missing, extra, or conflicting entries between a local and remote okra database.
+
+This can be used
 
 `okra-js` is one of two reference implementations - [the other](https://github.com/canvasxyz/okra) is written in Zig and can be installed as a native NodeJS module.
 
@@ -50,7 +53,7 @@ The tree can be used as a normal key/value store with `.get`, `.set`, and `.dele
 
 > ⚠️ Concurrent calls to `.set` and `.delete` **WILL cause internal corruption** - you must always use `await`, locks, a queue, or some other kind of concurrency control.
 
-Setting or deleting an entry translates into several `put` and `del` operations in the underlying `abstract-level` database. The `abstract-level` interface only offers "transactions" in the form of batched operations, which isn't suitable for dynamic internal tree maintenance. As a result, `.set` and `.delete` have weak consistency properties: if a underlying `put` or `del` fails, it will leave the tree in a corrupted state. If this happens, it can be corrected with a call to `await Tree.rebuild()`.
+Setting or deleting an entry translates into several `put` and `del` operations in the underlying `abstract-level` database. The `abstract-level` interface only offers "transactions" in the form of batched operations, which isn't suitable for dynamic internal tree maintenance. As a result, `.set` and `.delete` have weak consistency properties: if a underlying `put` or `del` fails, it will leave the tree in a corrupted state. If this happens, it can be corrected with a call to `await tree.rebuild()`.
 
 If atomic and consistent transactions are important to you, consider the native NodeJS binding for the Zig implementation of okra, which is fully ACID compliant and supports reads and writes concurrently.
 
@@ -137,14 +140,15 @@ First, you must have an instance of the `Source` interface for the remote okra d
 ```ts
 interface Source {
 	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
 }
 ```
 
-`Tree` itself implements `Source`, so we can demonstrate syncing two local databases.
+`Tree` itself implements `Source`, so we can easily demonstrate the sync methods using two local databases:
 
 ```ts
+import { Tree, collect } from "@canvas-js/okra"
+
 const source = await Tree.open(new MemoryLevel())
 const target = await Tree.open(new MemoryLevel())
 
@@ -161,10 +165,11 @@ await source.delete(new Uint8Array([0x21]))
 await target.delete(new Uint8Array([0x44]))
 
 // set conflicting values for another entry
+const encoder = new TextEncoder()
 await source.set(new Uint8Array([0x04]), encoder.encode("foo"))
 await target.set(new Uint8Array([0x04]), encoder.encode("bar"))
 
-await collect(target.sync(source))
+await collect(target.delta(source))
 // [
 //   {
 //     key: <Buffer 04>,
@@ -184,19 +189,100 @@ await collect(target.sync(source))
 // ]
 ```
 
-`Tree.sync` yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a Uint8Array. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
+`Tree.prototype.delta` is the lowest-level form of syncing. It is an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a Uint8Array. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
 
-> ⚠️ Syncing **will fail if either the source or the target are concurrently modified**. This is necessary because abstract-level does not support proper snapshots and transactions.
+> ⚠️ Syncing **will fail if the source is concurrently modified**. This is because abstract-level does not support proper snapshots and transactions.
 
-This means that your implementation of sync transport will need some concept of "sessions" so that okra-js sources can queue pending calls to `.set` and `.delete` when a session is active, and resume handling them when the session ends. This could be done with an async queue like[ `p-queue`](https://github.com/sindresorhus/p-queue) or using locks from e.g. the [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API). Furthermore, the _target_ must not In the future, okra-js may enforce locking itself, but for now it is left to the user.
+This means that your implementation of sync transport will need some concept of "sessions" so that okra-js sources can queue pending calls to `.set` and `.delete` when a session is active, and resume handling them when the session ends. This could be done with an async queue like[ `p-queue`](https://github.com/sindresorhus/p-queue) or using locks from e.g. the [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API). In the future, okra-js may enforce locking itself, but for now it is left to the user.
 
-The Zig implementation and its NodeJS bindings `@canvas-js/okra-node` support snapshots and thus can process a read-write transaction with abitrarily mant concurrent read-only transactions.
+However, due to the specific behavior of the sync algorithm, the **target tree _can_ be modified while syncing**. You can safely `await tree.set(...)` and `await tree.delete(...)` inside a `for await (const delta of tree.delta(source)) { ... }` loop.
+
+The Zig implementation and its NodeJS bindings `@canvas-js/okra-node` support snapshots and thus can process a read-write transaction with abitrarily many concurrent read-only transactions.
+
+### `pull`, `copy`, and `merge` patterns
+
+Calling `tree.delta(source)` does not automatically modify `tree` - it only iterates over the differences. Taking action in response to each delta is up to you! There are several different ways that you might want to use the deltas, three of which are implemented as exmples and convenience methods.
+
+#### `Tree.prototype.pull`
+
+Call `await tree.pull(source)` to _pull in missing entries_ that `source` has but `tree` doesn't, doing nothing for entries in `tree` missing in `source`, and throwing an error if the values for a key conflict. Only use this if the values of keys don't change! One example where this is useful is in content-addressed systems where keys are derived from the hashes of immutable values.
+
+One way of looking at `pull` is that it implements a grow-only set with an efficient union operation. This pattern is useful, for example, as a persistence layer for **operation-based CRDT** systems, where it allows arbitrary peers to directly sync their sets of operations without relying on tracking methods that scale linearly in the number of peers. In that case, you'd probably want to use `delta(source)` directly so that you can apply new operations in addition to inserting them into the tree.
+
+```ts
+class Tree {
+	// ...
+	public async pull(source: Source): Promise<void> {
+		for await (const delta of this.delta(source)) {
+			if (delta.source === null) {
+				continue
+			} else if (delta.target === null) {
+				await this.set(delta.key, delta.source)
+			} else {
+				throw new ModuleError("Conflict", { code: "OKRA_CONFLICT" })
+			}
+		}
+	}
+}
+```
+
+#### `Tree.prototype.copy`
+
+Call `await tree.copy(source)` to _copy the remote source_, deleting any local entries that `source` doesn't have, setting new entries for keys that `source` has that `tree` doesn't, and adopting `source`'s value for any conflicting keys. By the end, `tree` will have the exact same leaf entries, tree structure, and root hash as `source`.
+
+```ts
+class Tree {
+	// ...
+	public async copy(source: Source): Promise<void> {
+		for await (const delta of this.delta(source)) {
+			if (delta.source === null) {
+				await this.delete(delta.key)
+			} else {
+				await this.set(delta.key, delta.source)
+			}
+		}
+	}
+}
+```
+
+#### `Tree.prototype.merge`
+
+Call `await tree.merge(source, arbiter)` to merge entries from a remote source - keeping local entries that `source` doesn't have, copying entries from `source` that aren't present in `tree`, and resolving conflicting values using the provided `arbiter` method.
+
+In most cases, the `arbiter` method should deterministically choose one of the two values, but it could also return a new "merged" value. The only hard constraints are that it must be commutative, associative, and idempotent.
+
+- commutativity: `arbiter(A, B) == arbiter(B, A)` for all `A` and `B`
+- associativity: `arbiter(A, arbiter(B, C)) == arbiter(arbiter(A, B), C)` for all `A`, `B`, and `C`
+- idempotence: `arbiter(A, A) == A` for all `A`
+
+The merge method is useful for implementing **persistent state-based CRDT** systems. If your top-level state and its global merge function can be represented as a key/value map with entry-wise merging, you can use okra to **perform p2p state merges in logarithmic time**.
+
+```ts
+class Tree {
+	// ...
+	public async merge(
+		source: Source,
+		arbiter: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+	): Promise<void> {
+		for await (const delta of this.delta(source)) {
+			if (delta.source === null) {
+				continue
+			} else if (delta.target === null) {
+				await this.set(delta.key, delta.source)
+			} else {
+				const value = await mergeValues(delta.key, delta.source, delta.target)
+				await this.set(delta.key, value)
+			}
+		}
+	}
+}
+```
 
 ### Debugging
 
 okra-js uses the [`debug`](https://www.npmjs.com/package/debug) package for logging. In NodeJS, you can turn on logging to stdout by setting a `DEBUG=okra:*` environment variable. In the browser, you can turn on console logging by setting `localStorage.debug = 'okra:*'`.
 
-Also useful is the `tree.print()` method, which pretty-prints the merkle tree structure to a utf-8 `AsyncIterableIterator<Uint8Array>` stream. In NodeJS, you can pipe this directly to stdout or consume the entire output with the `stream/consumers` utilities:
+Also useful is the `tree.print()` method, which pretty-prints the merkle tree structure to a utf-8 `AsyncIterableIterator<Uint8Array>` stream. In NodeJS, you can pipe this directly to stdout or consume the entire output with the `text` utility method from `stream/consumers`:
 
 ```ts
 import { text } from "node:stream/consumers"
@@ -227,6 +313,8 @@ console.log(await text(bigTree.print()))
 // ...
 ```
 
+Entry values are not printed; the rightmost column is the list of keys of the leaf entries in hex.
+
 ## Testing
 
 Tests are run with [AVA](https://github.com/avajs/ava) and live in [./test/\*.test.ts](./test). They use [memory-level](https://github.com/Level/memory-level) for the underlying database.
@@ -235,7 +323,7 @@ Tests are run with [AVA](https://github.com/avajs/ava) and live in [./test/\*.te
 npm run test
 ```
 
-The two most important things covered by the tests are 1) correctness of the tree update algorithm 2) correctness of the syncing algorithm. Correctness of the tree is tested by comparing the underlying database entry-by-entry with a reference tree built layer-by-layer using the `Builder` class exported from [./src/builder.ts](./src/builder.ts) (also used by `Tree.rebuild`). These tests insert entries in random order in a series of sizes up to 10000 entries, using `Q = 4` to maximize tree height and internal complexity. Correctness of syncing is tested by initializing two trees with the same contents, also with `Q = 4`, then randomly deleting different sets of entries from each of them, manually tracking the expected set of deltas and testing that `t.deepEqual(await collect(target.sync(source)), expected)`.
+The two most important things covered by the tests are 1) correctness of the tree update algorithm 2) correctness of the syncing algorithm. Correctness of the tree is tested by comparing the underlying database entry-by-entry with a reference tree built layer-by-layer using the `Builder` class exported from [./src/builder.ts](./src/builder.ts) (also used by `Tree.prototype.rebuild`). These tests insert entries in random order in a series of sizes up to 10000 entries, using `Q = 4` to maximize tree height and internal complexity. Correctness of syncing is tested by initializing two trees with the same contents, also with `Q = 4`, then randomly deleting different sets of entries from each of them, manually tracking the expected set of deltas and testing that `t.deepEqual(await collect(target.delta(source)), expected)`.
 
 ## API
 
@@ -258,7 +346,6 @@ declare type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8
 
 declare interface Source {
 	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
 }
 
@@ -267,7 +354,7 @@ declare interface Source {
  * Just pass an abstract-level instance to Tree.open and the TypeScript
  * compiler should be able to infer the rest.
  */
-declare class Tree<TFormat, KDefault, VDefault> implements Source {
+declare class Tree<TFormat = any, KDefault = any, VDefault = any> implements Source {
 	public readonly db: AbstractLevel<TFormat, KDefault, VDefault>
 	public readonly K: number
 	public readonly Q: number
@@ -296,12 +383,22 @@ declare class Tree<TFormat, KDefault, VDefault> implements Source {
 	public getChildren(level: number, key: Key): Promise<Node[]>
 
 	/**
-	 * Iterate over the differences between the entries in the local tree and a remote source
+	 * Iterate over the differences between the entries in the local tree and a remote source.
 	 */
-	public sync(source: Source): AsyncGenerator<Delta, void, undefined>
+	public delta(source: Source): AsyncGenerator<Delta, void, undefined>
+
+	public pull(source: Source): Promise<void>
+
+	public copy(source: Source): Promise<void>
+
+	public merge(
+		source: Source,
+		mergeValues: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+	): Promise<void>
 
 	/**
-	 * Raze and rebuild the merkle tree from the leaves
+	 * Raze and rebuild the merkle tree from the leaves.
+	 * @returns the new root node
 	 */
 	public rebuild(): Promise<void>
 

@@ -25,6 +25,7 @@ import {
 	Entry,
 } from "./utils.js"
 import { Driver } from "./driver.js"
+import ModuleError from "module-error"
 
 type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
 
@@ -472,15 +473,54 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 	/**
 	 * Iterate over the differences between the entries in the local tree and a remote source.
 	 */
-	public async *sync(source: Source): AsyncIterableIterator<Delta> {
+	public async *delta(source: Source): AsyncGenerator<Delta, void, undefined> {
 		const driver = new Driver(source, this)
-		yield* driver.sync()
+		yield* driver.delta()
+	}
+
+	public async copy(source: Source): Promise<void> {
+		for await (const delta of this.delta(source)) {
+			if (delta.source === null) {
+				await this.delete(delta.key)
+			} else {
+				await this.set(delta.key, delta.source)
+			}
+		}
+	}
+
+	public async pull(source: Source): Promise<void> {
+		for await (const delta of this.delta(source)) {
+			if (delta.source === null) {
+				continue
+			} else if (delta.target === null) {
+				await this.set(delta.key, delta.source)
+			} else {
+				throw new ModuleError("Conflict", { code: "OKRA_CONFLICT" })
+			}
+		}
+	}
+
+	public async merge(
+		source: Source,
+		arbiter: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+	): Promise<void> {
+		for await (const delta of this.delta(source)) {
+			if (delta.source === null) {
+				continue
+			} else if (delta.target === null) {
+				await this.set(delta.key, delta.source)
+			} else {
+				const value = await arbiter(delta.key, delta.source, delta.target)
+				await this.set(delta.key, value)
+			}
+		}
 	}
 
 	/**
 	 * Raze and rebuild the merkle tree from the leaves.
+	 * @returns the new root node
 	 */
-	public async rebuild(): Promise<void> {
+	public async rebuild(): Promise<Node> {
 		const iter = this.db.keys({ gte: createEntryKey(1, null), lt: HEADER_KEY })
 		for await (const key of iter) {
 			await this.db.del(key, encodingOptions)
@@ -488,6 +528,7 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 
 		const builder = await Builder.open(this.db, { K: this.K, Q: this.Q })
 		const root = await builder.finalize()
+		return root
 	}
 
 	/**
