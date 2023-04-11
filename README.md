@@ -398,7 +398,7 @@ declare class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sou
 
   public merge(
     source: Source,
-    mergeValues: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+    arbiter: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
   ): Promise<void>
 
   /**
