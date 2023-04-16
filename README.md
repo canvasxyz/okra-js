@@ -188,6 +188,7 @@ interface Source {
 `Tree` itself implements `Source`, so we can easily demonstrate the sync methods using two local databases.
 
 ```ts
+import { sha256 } from "@noble/hashes/sha256"
 import { Tree, collect } from "@canvas-js/okra"
 import { MemoryStore } from "@canvas-js/okra-memory"
 
