@@ -2,9 +2,6 @@ import test, { ExecutionContext } from "ava"
 
 import { iota, getKey, compareEntries, random, initialize } from "./utils.js"
 
-const K = 16
-const Q = 4
-
 async function testPull(
 	t: ExecutionContext,
 	seed: string,
@@ -12,7 +9,10 @@ async function testPull(
 	deleteA: number,
 	deleteB: number
 ): Promise<void> {
-	const [a, b] = await Promise.all([initialize(t, iota(count), { K, Q }), initialize(t, iota(count), { K, Q })])
+	const [a, b] = await Promise.all([
+		initialize(t, iota(count), { K: 16, Q: 4 }),
+		initialize(t, iota(count), { K: 16, Q: 4 }),
+	])
 
 	for (const [key, value] of iota(count)) {
 		await Promise.all([a.set(key, value), b.set(key, value)])

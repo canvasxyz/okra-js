@@ -1,0 +1,35 @@
+{
+	"private": true,
+	"name": "@canvas-js/okra-memory",
+	"description": "Temporary okra database backed by an in-memory red/black tree",
+	"version": "0.0.0",
+	"type": "module",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib/**/*.js",
+		"lib/**/*.d.ts"
+	],
+	"scripts": {
+		"test": "ava"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/canvasxyz/okra-js.git"
+	},
+	"author": "Joel Gustafson",
+	"license": "MIT",
+	"devDependencies": {
+		"@ava/typescript": "^4.0.0",
+		"@types/node": "^18.15.11",
+		"ava": "^5.2.0",
+		"typescript": "^5.0.3"
+	},
+	"dependencies": {
+		"@canvas-js/okra": "0.0.0",
+		"@types/debug": "^4.1.7",
+		"abstract-level": "^1.0.3",
+		"debug": "^4.3.4",
+		"memory-level": "^1.0.0"
+	}
+}

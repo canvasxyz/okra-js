@@ -1,31 +1,13 @@
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { AbstractLevel, AbstractIteratorOptions } from "abstract-level"
-
-import { Delta, Key, Node, Source } from "./types.js"
-import { getHeader, isHeaderEntry, HEADER_KEY } from "./header.js"
+import type { Delta, Key, Node, Source, NodeRange } from "./interface.js"
+import { KeyValueStore, NodeStore, Metadata, KeyRange } from "./store.js"
 import { Builder } from "./builder.js"
-import { debug } from "./format.js"
-import { K, Q } from "./constants.js"
-import {
-	assert,
-	equalArrays,
-	equalKeys,
-	hashEntry,
-	isSplit,
-	lessThan,
-	getLeafAnchorHash,
-	encodingOptions,
-	entryToNode,
-	nodeToEntry,
-	createEntryKey,
-	parseNodeValue,
-	parseNodeKey,
-	Entry,
-} from "./utils.js"
 import { Driver } from "./driver.js"
-import ModuleError from "module-error"
+import { assert, equalKeys, lessThan } from "./utils.js"
+import { debug, formatNode } from "./format.js"
+import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
 
 type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
 
@@ -33,98 +15,81 @@ type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "
 const Result = { Update: 0, Delete: 1 } as const
 type Result = typeof Result[keyof typeof Result]
 
-/**
- * You should never have to instantiate the generic type parameters manually.
- * Just pass an abstract-level instance to Tree.open and the TypeScript
- * compiler should be able to infer the rest.
- */
-export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Source {
+export interface TreeOptions {
+	K?: number
+	Q?: number
+	log?: (format: string, ...args: any[]) => void
+}
+
+export class Tree extends NodeStore implements Source {
+	private static leafEntryLowerBound = { key: NodeStore.createEntryKey(0, null), inclusive: false }
+	private static leafEntryUpperBound = { key: NodeStore.createEntryKey(1, null), inclusive: false }
+
 	private static indent = "  "
-	private static async get<TFormat, KDefault, VDefault>(
-		db: AbstractLevel<TFormat, KDefault, VDefault>,
-		key: Uint8Array
-	): Promise<Uint8Array | null> {
-		try {
-			return await db.get(key, encodingOptions)
-		} catch (err: any) {
-			// TODO: switch to `err instanceof ModuleError` when memory-level fixes their shit
-			if (err.code === "LEVEL_NOT_FOUND") {
-				return null
-			} else {
-				throw err
-			}
-		}
-	}
 
-	public static async open<TFormat, KDefault, VDefault>(
-		db: AbstractLevel<TFormat, KDefault, VDefault>,
-		options: { K?: number; Q?: number; log?: (format: string, ...args: any[]) => void } = {}
-	): Promise<Tree<TFormat, KDefault, VDefault>> {
-		const k = options.K ?? K
-		const q = options.Q ?? Q
-
-		const header = await Tree.get(db, HEADER_KEY)
-		if (header === null) {
-			await db.put(HEADER_KEY, getHeader({ K: K, Q: q }), encodingOptions)
-			await db.put(createEntryKey(0, null), getLeafAnchorHash({ K: k }), encodingOptions)
-		} else if (!equalArrays(header, getHeader({ K: K, Q: q }))) {
-			throw new Error("Invalid header")
-		}
-
-		return new Tree(db, k, q, options.log ?? debug("okra:tree"))
+	public static async open(store: KeyValueStore, options: TreeOptions = {}): Promise<Tree> {
+		const K = options.K ?? DEFAULT_K
+		const Q = options.Q ?? DEFAULT_Q
+		const tree = new Tree(store, { K, Q }, options.log ?? debug("okra:tree"))
+		await tree.setNode({ level: 0, key: null, hash: tree.getLeafAnchorHash() })
+		return tree
 	}
 
 	private depth = 0
 	private newSiblings: Key[] = []
 
-	constructor(
-		public readonly db: AbstractLevel<TFormat, KDefault, VDefault>,
-		public readonly K: number,
-		public readonly Q: number,
-		private readonly formatter: (format: string, ...args: any[]) => void
-	) {}
-
-	public async close(): Promise<void> {
-		await this.db.close()
+	private constructor(
+		public readonly store: KeyValueStore,
+		public readonly metadata: Metadata,
+		private readonly format: (format: string, ...args: any[]) => void
+	) {
+		super(store, metadata)
 	}
 
-	/**
-	 * Iterate over a range of leaf key/value entries. Does not yield the leaf anchor node.
-	 * @param lowerBound *inclusive* lower bound (default null/no lower bound)
-	 * @param upperBound *exclusive* upper bound (default null/no upper bound)
-	 * @param options
-	 */
-	public async *entries(
-		lowerBound: Uint8Array | null = null,
-		upperBound: Uint8Array | null = null,
-		options: { reverse?: boolean } = {}
-	): AsyncIterableIterator<Entry> {
-		const reverse = options.reverse ?? false
-		const levelIteratorOptions: AbstractIteratorOptions<Uint8Array, Uint8Array> = { reverse, ...encodingOptions }
-		if (lowerBound === null) {
-			levelIteratorOptions.gt = createEntryKey(0, null)
+	public async close() {
+		if (this.store.close !== undefined) {
+			await this.store.close()
+		}
+	}
+
+	public async *entries({ reverse, lowerBound, upperBound }: KeyRange = {}): AsyncIterableIterator<
+		[Uint8Array, Uint8Array]
+	> {
+		const range: KeyRange = { reverse: reverse ?? false }
+
+		if (lowerBound !== undefined) {
+			const { key, inclusive } = lowerBound
+			range.lowerBound = { key: NodeStore.createEntryKey(0, key), inclusive }
 		} else {
-			levelIteratorOptions.gte = createEntryKey(0, lowerBound)
+			range.lowerBound = Tree.leafEntryLowerBound
 		}
 
-		if (upperBound === null) {
-			levelIteratorOptions.lt = createEntryKey(1, null)
+		if (upperBound !== undefined) {
+			const { key, inclusive } = upperBound
+			range.upperBound = { key: NodeStore.createEntryKey(0, key), inclusive }
 		} else {
-			levelIteratorOptions.lt = createEntryKey(0, upperBound)
+			range.upperBound = Tree.leafEntryUpperBound
 		}
 
-		const iter = this.db.iterator<Uint8Array, Uint8Array>(levelIteratorOptions)
-		for await (const entry of iter) {
-			const node = entryToNode(entry)
-			assert(node.level === 0 && node.key !== null && node.value !== undefined)
+		for await (const entry of this.store.entries(range)) {
+			const node = this.parseEntry(entry)
+			if (node.key === null || node.value === undefined) {
+				throw new Error("Internal error - unexpected leaf entry")
+			}
+
 			yield [node.key, node.value]
 		}
 	}
 
 	public async get(key: Uint8Array): Promise<Uint8Array | null> {
-		const entryKey = createEntryKey(0, key)
-		const entryValue = await Tree.get(this.db, entryKey)
-		return entryValue && parseNodeValue(entryValue, { K: this.K })
+		const node = await this.getNode(0, key)
+		if (node === null) {
+			return null
+		} else if (node.value !== undefined) {
+			return node.value
+		} else {
+			throw new Error("Internal error - missing leaf value")
+		}
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
@@ -170,9 +135,7 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 				break
 			}
 
-			const rootEntryKey = createEntryKey(rootLevel, null)
-			this.log("deleting %h", rootEntryKey)
-			await this.db.del(rootEntryKey, encodingOptions)
+			await this.deleteNode(rootLevel, null)
 
 			rootLevel--
 		}
@@ -182,17 +145,17 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 		this.log("applyLeaf(%k, { %s %h })", firstChild, operation.type, operation.key)
 		if (operation.type === "set") {
 			const { key, value } = operation
-			const hash = hashEntry(key, value, { K: this.K })
+			const hash = this.hashEntry(key, value)
 			await this.setNode({ level: 0, key, hash, value })
 
 			if (lessThan(firstChild, key)) {
-				if (isSplit(hash, { Q: this.Q })) {
+				if (this.isSplit(hash)) {
 					this.newSiblings.push(key)
 				}
 
 				return Result.Update
 			} else if (equalKeys(firstChild, key)) {
-				if (firstChild === null || isSplit(hash, { Q: this.Q })) {
+				if (firstChild === null || this.isSplit(hash)) {
 					return Result.Update
 				} else {
 					return Result.Delete
@@ -201,9 +164,8 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 				throw new Error("invalid database")
 			}
 		} else if (operation.type === "delete") {
-			const { key } = operation
-			await this.db.del(createEntryKey(0, key), encodingOptions)
-			if (equalKeys(key, firstChild)) {
+			await this.deleteNode(0, operation.key)
+			if (equalKeys(operation.key, firstChild)) {
 				return Result.Delete
 			} else {
 				return Result.Update
@@ -290,48 +252,9 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 		this.newSiblings = newSiblings
 	}
 
-	private async *range(level: number, key: Key): AsyncIterable<Node> {
-		const iter = await this.db.iterator<Uint8Array, Uint8Array>({
-			gte: createEntryKey(level, key),
-			...encodingOptions,
-		})
-
-		try {
-			let entry = await iter.next()
-			if (entry === undefined) {
-				throw new Error("Node not found")
-			}
-
-			let node = entryToNode(entry, { K: this.K })
-			if (node.level !== level || !equalKeys(key, node.key)) {
-				throw new Error("Not not found")
-			}
-
-			yield node
-
-			while (true) {
-				entry = await iter.next()
-				assert(entry !== undefined)
-				if (isHeaderEntry(entry)) {
-					break
-				}
-
-				node = entryToNode(entry, { K: this.K })
-				if (node.level !== level || isSplit(node.hash, { Q: this.Q })) {
-					break
-				}
-
-				yield node
-			}
-		} finally {
-			await iter.close()
-		}
-	}
-
 	private async findTarget(level: number, firstChild: Key, key: Uint8Array): Promise<Key> {
-		let target: Node | undefined = undefined
-
-		for await (const node of this.range(level, firstChild)) {
+		let target: Node | null = null
+		for await (const node of this.iterate({ level, lowerBound: { key: firstChild, inclusive: true } })) {
 			if (lessThan(key, node.key)) {
 				break
 			} else {
@@ -339,7 +262,7 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 			}
 		}
 
-		assert(target !== undefined)
+		assert(target !== null)
 		return target.key
 	}
 
@@ -349,29 +272,30 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 
 		assert(level > 0)
 
-		const targetEntryKey = createEntryKey(level, target)
+		await this.deleteNode(level, target)
 
-		this.log("deleting %h", targetEntryKey)
-		await this.db.del(targetEntryKey, encodingOptions)
+		const range: NodeRange = {
+			level,
+			reverse: true,
+			lowerBound: { key: null, inclusive: true },
+			upperBound: { key: target, inclusive: false },
+		}
 
-		for await (const previousChildEntryKey of this.db.keys({ lt: targetEntryKey, reverse: true })) {
-			this.log("previousChildEntryKey: %h", previousChildEntryKey)
-			const previousChildKey = parseNodeKey(previousChildEntryKey)
-
-			if (previousChildKey === null) {
+		for await (const previousChild of this.iterate(range)) {
+			this.log("previousChild: %n", previousChild)
+			if (previousChild.key === null) {
 				return null
 			}
 
-			const previousGrandChild = await this.getNode(level - 1, previousChildKey)
-			if (previousGrandChild !== null && isSplit(previousGrandChild.hash, { Q: this.Q })) {
-				return previousChildKey
+			const previousGrandChild = await this.getNode(level - 1, previousChild.key)
+			if (previousGrandChild !== null && this.isSplit(previousGrandChild.hash)) {
+				return previousChild.key
 			}
 
-			this.log("deleting %h", previousChildEntryKey)
-			await this.db.del(previousChildEntryKey, encodingOptions)
+			await this.deleteNode(level, previousChild.key)
 		}
 
-		throw new Error("internal error")
+		throw new Error("Internal error: unexpected end of range")
 	}
 
 	// Computes and sets the hash of the given node.
@@ -380,8 +304,12 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 	private async hashNode(level: number, key: Key): Promise<boolean> {
 		this.log("hashing %d %k", level, key)
 
-		const hash = blake3.create({ dkLen: K })
-		for await (const node of this.range(level - 1, key)) {
+		const hash = blake3.create({ dkLen: this.metadata.K })
+		for await (const node of this.iterate({ level: level - 1, lowerBound: { key, inclusive: true } })) {
+			if (this.isSplit(node.hash) && !equalKeys(node.key, key)) {
+				break
+			}
+
 			this.log("------- %h (%k)", node.hash, node.key)
 			hash.update(node.hash)
 		}
@@ -389,55 +317,33 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 		const node: Node = { level, key, hash: hash.digest() }
 		this.log("------- %h", node.hash)
 		await this.setNode(node)
-		return isSplit(node.hash, { Q: this.Q })
-	}
-
-	private async setNode(node: Node): Promise<void> {
-		const [key, value] = nodeToEntry(node, { K: this.K })
-		this.log("setting %h -> %h", key, value)
-		await this.db.put(key, value, encodingOptions)
+		return this.isSplit(node.hash)
 	}
 
 	private async getLastNode(level: number): Promise<Node> {
-		const iter = this.db.iterator<Uint8Array, Uint8Array>({
-			lt: createEntryKey(level + 1, null),
-			reverse: true,
-			...encodingOptions,
-		})
+		for await (const node of this.iterate({ level, reverse: true })) {
+			assert(node.level === level)
+			return node
+		}
 
-		const last = await iter.next()
-		assert(last)
-
-		const node = entryToNode(last, { K: this.K })
-		assert(node.level === level)
-
-		return node
+		throw new Error("Internal error: empty level")
 	}
 
 	private log(format: string, ...args: any[]) {
-		this.formatter("%s" + format, Tree.indent.repeat(this.depth), ...args)
+		this.format("%s" + format, Tree.indent.repeat(this.depth), ...args)
 	}
 
 	/**
 	 * Get the root node of the merkle tree. Returns the leaf anchor node if the tree is empty.
 	 */
 	public async getRoot(): Promise<Node> {
-		const iter = this.db.iterator<Uint8Array, Uint8Array>({
-			lte: HEADER_KEY,
-			reverse: true,
-			...encodingOptions,
-		})
+		for await (const entry of this.store.entries({ reverse: true })) {
+			const node = this.parseEntry(entry)
+			assert(node.key === null, "Internal error: unexpected root node key")
+			return node
+		}
 
-		const headerEntry = await iter.next()
-		assert(headerEntry !== undefined && isHeaderEntry(headerEntry))
-
-		const rootEntry = await iter.next()
-		assert(rootEntry !== undefined)
-
-		const root = entryToNode(rootEntry, { K: this.K })
-		assert(root.key === null)
-
-		return root
+		throw new Error("Internal error: empty node store")
 	}
 
 	/**
@@ -449,25 +355,15 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 		}
 
 		const children: Node[] = []
-
-		for await (const node of this.range(level - 1, key)) {
-			children.push(node)
+		for await (const node of this.iterate({ level: level - 1, lowerBound: { key, inclusive: true } })) {
+			if (this.isSplit(node.hash) && !equalKeys(node.key, key)) {
+				break
+			} else {
+				children.push(node)
+			}
 		}
 
 		return children
-	}
-
-	/**
-	 * Get a specific node in the merkle tree, identified by level and key.
-	 */
-	public async getNode(level: number, key: Key): Promise<Node | null> {
-		const entryKey = createEntryKey(level, key)
-		const entryValue = await Tree.get(this.db, entryKey)
-		if (entryValue === null) {
-			return null
-		}
-
-		return entryToNode([entryKey, entryValue], { K: this.K })
 	}
 
 	/**
@@ -495,7 +391,7 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 			} else if (delta.target === null) {
 				await this.set(delta.key, delta.source)
 			} else {
-				throw new ModuleError("Conflict", { code: "OKRA_CONFLICT" })
+				throw new Error(`Conflict at key ${hex(delta.key)}`)
 			}
 		}
 	}
@@ -521,12 +417,15 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 	 * @returns the new root node
 	 */
 	public async rebuild(): Promise<Node> {
-		const iter = this.db.keys({ gte: createEntryKey(1, null), lt: HEADER_KEY })
-		for await (const key of iter) {
-			await this.db.del(key, encodingOptions)
+		const range: KeyRange = {
+			lowerBound: { key: NodeStore.createEntryKey(1, null), inclusive: true },
 		}
 
-		const builder = await Builder.open(this.db, { K: this.K, Q: this.Q })
+		for await (const [entryKey] of this.store.entries(range)) {
+			await this.store.delete(entryKey)
+		}
+
+		const builder = await Builder.open(this.store, this.metadata)
 		const root = await builder.finalize()
 		return root
 	}
@@ -547,12 +446,15 @@ export class Tree<TFormat = any, KDefault = any, VDefault = any> implements Sour
 			yield encoder.encode(` ${hash(node)} `)
 			if (node.level === 0) {
 				if (node.key === null) {
-					yield encoder.encode(`|\n`)
+					yield encoder.encode(`│\n`)
 				} else {
-					yield encoder.encode(`| ${hex(node.key)}\n`)
+					yield encoder.encode(`│ ${hex(node.key)}\n`)
 				}
 			} else {
 				const children = await tree.getChildren(node.level, node.key)
+				if (node.level === 3) {
+					console.log("got children", formatNode(node), children.map(formatNode))
+				}
 				for (const [i, child] of children.entries()) {
 					if (i > 0) {
 						yield encoder.encode(prefix)

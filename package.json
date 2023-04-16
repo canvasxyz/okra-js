@@ -1,43 +1,19 @@
 {
 	"private": true,
-	"name": "@canvas-js/okra",
-	"description": "Pure JS merkle search tree over an abstract-level interface",
+	"description": "A psueorandom merkle search tree in pure JavaScript",
 	"version": "0.0.0",
 	"type": "module",
-	"main": "lib/index.js",
-	"types": "lib/index.d.ts",
-	"files": [
-		"lib/**/*.js",
-		"lib/**/*.d.ts"
-	],
 	"workspaces": [
-		"."
+		"packages/*"
 	],
 	"scripts": {
-		"dev": "tsc --build tsconfig.json test/tsconfig.json --watch",
-		"build": "tsc --build tsconfig.json test/tsconfig.json",
-		"clean": "tsc --build tsconfig.json test/tsconfig.json --clean",
-		"test": "ava"
+		"dev": "tsc --build --watch",
+		"build": "tsc --build",
+		"clean": "tsc --build --clean",
+		"test": "npm run test --workspace packages/okra"
 	},
 	"repository": {
 		"type": "git",
 		"url": "git://github.com/canvasxyz/okra-js.git"
-	},
-	"author": "Joel Gustafson",
-	"license": "MIT",
-	"devDependencies": {
-		"@ava/typescript": "^4.0.0",
-		"@types/node": "^18.15.11",
-		"ava": "^5.2.0",
-		"memory-level": "^1.0.0",
-		"prando": "^6.0.1",
-		"typescript": "^5.0.3"
-	},
-	"dependencies": {
-		"@noble/hashes": "^1.2.0",
-		"@types/debug": "^4.1.7",
-		"abstract-level": "^1.0.3",
-		"debug": "^4.3.4",
-		"module-error": "^1.0.2"
 	}
 }

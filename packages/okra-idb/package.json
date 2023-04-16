@@ -1,0 +1,36 @@
+{
+	"private": true,
+	"name": "@canvas-js/okra-idb",
+	"description": "Persistent okra database backed by IndexedDB",
+	"version": "0.0.0",
+	"type": "module",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib/**/*.js",
+		"lib/**/*.d.ts"
+	],
+	"scripts": {
+		"test": "ava"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/canvasxyz/okra-js.git"
+	},
+	"author": "Joel Gustafson",
+	"license": "MIT",
+	"dependencies": {
+		"@canvas-js/okra": "0.0.0"
+	},
+	"devDependencies": {
+		"@ava/typescript": "^4.0.0",
+		"@types/node": "^18.15.11",
+		"ava": "^5.2.0",
+		"fake-indexeddb": "^4.0.1",
+		"typescript": "^5.0.3",
+		"idb": "^7.1.1"
+	},
+	"peerDependencies": {
+		"idb": "^7.1.1"
+	}
+}

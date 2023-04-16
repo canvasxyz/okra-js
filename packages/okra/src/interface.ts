@@ -7,6 +7,13 @@ export type Node = {
 	value?: Uint8Array
 }
 
+export interface NodeRange {
+	level: number
+	reverse?: boolean
+	lowerBound?: { key: Key; inclusive: boolean }
+	upperBound?: { key: Key; inclusive: boolean }
+}
+
 export interface Source {
 	getRoot(): Promise<Node>
 	getChildren(level: number, key: Key): Promise<Node[]>

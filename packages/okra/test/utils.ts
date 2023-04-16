@@ -1,33 +1,29 @@
 import type { ExecutionContext } from "ava"
-import { MemoryLevel } from "memory-level"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 import Prando from "prando"
 
-import { Tree, Builder } from "@canvas-js/okra"
+import { MemoryStore } from "@canvas-js/okra-memory"
+import { Node, Tree, Builder, DEFAULT_METADATA } from "@canvas-js/okra"
 
-export const encodingOptions = { keyEncoding: "view", valueEncoding: "view" }
-
-export function getDB(t?: ExecutionContext): MemoryLevel<Uint8Array, Uint8Array> {
-	const db = new MemoryLevel<Uint8Array, Uint8Array>({ keyEncoding: "view", valueEncoding: "view" })
-	if (t !== undefined) {
-		t.teardown(() => db.close())
-	}
-
-	return db
+export function getStore(t: ExecutionContext): MemoryStore {
+	const store = new MemoryStore()
+	t.teardown(() => store.close())
+	return store
 }
 
 export async function initialize(
 	t: ExecutionContext,
 	entries: Iterable<[Uint8Array, Uint8Array]>,
-	options: { K: number; Q: number } = { K: 16, Q: 4 }
+	metadata = DEFAULT_METADATA
 ): Promise<Tree> {
-	const db = getDB(t)
-	const builder = await Builder.open(db, options)
+	const store = getStore(t)
+	const builder = await Builder.open(store, metadata)
 	for (const [key, value] of entries) {
 		await builder.set(key, value)
 	}
+
 	await builder.finalize()
-	return await Tree.open(db, options)
+	return await Tree.open(store, metadata)
 }
 
 export const defaultValue = Buffer.from([0xff, 0xff, 0xff, 0xff])
@@ -123,5 +119,23 @@ export function* random(seed: string, min: number, max: number, count: number): 
 	const rng = new Prando(seed)
 	for (let i = 0; i < count; i++) {
 		yield rng.nextInt(min, max - 1)
+	}
+}
+
+export function compare(a: Node, b: Node): -1 | 0 | 1 {
+	if (a.level < b.level) {
+		return -1
+	} else if (b.level < a.level) {
+		return 1
+	}
+
+	if (a.key !== null && b.key !== null) {
+		return Buffer.compare(a.key, b.key)
+	} else if (a.key !== null) {
+		return 1
+	} else if (b.key !== null) {
+		return -1
+	} else {
+		return 0
 	}
 }

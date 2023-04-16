@@ -1,6 +1,6 @@
 # okra-js
 
-Pure JS merkle search tree over an [`abstract-level`](https://github.com/Level/abstract-level) interface.
+A psueorandom merkle search tree in pure JavaScript.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ okra is a key/value store augmented with a _merkle search tree_ index. You can u
 
 okra can be used as a **natural persistence layer for operation-based CRDTs**, directly as a persistent state-based CRDT map with efficient merging, "rsync for key/value stores", and much more. Read through the examples in the usage section to see it in action.
 
-`@canvas-js/okra` is one of two compatible reference implementations. The other is [`@canvas-js/okra-node`](https://github.com/canvasxyz/okra), which is written in Zig and can be installed as a native NodeJS module.
+This repo is one of two compatible reference implementations. The other is [canvasxyz/okra](https://github.com/canvasxyz/okra), which is written in Zig and can also be installed as a native NodeJS module.
 
 ## Install
 
@@ -35,30 +35,50 @@ npm i @canvas-js/okra
 
 ## Usage
 
-okra is designed as a thin wrapper around an existing key/value store; the specification is documented in the main [canvasxyz/okra](https://github.com/canvasxyz/okra) repo. This package exports a `Tree` class that can wrap any implementation of the [abstract-level](https://github.com/Level/abstract-level) interface. abstract-level is a project that grew out of leveldb and its extended universe; it now houses a family of API-compatible key/value stores including [memory-level](https://github.com/Level/memory-level) (totally in-memory), [classic-level](https://github.com/Level/classic-level) (backed by LevelDB), and [browser-level](https://github.com/Level/browser-level), backed by IndexedDB. The examples here all use memory-level, but okra works with any of them.
+okra is designed as a thin wrapper around an abstract key/value store interface. The details of how okra stores the merkle tree nodes in the underlying key/value store are documented in the [Zig implementation repo](https://github.com/canvasxyz/okra).
+
+```ts
+interface KeyValueStore {
+  get(key: Uint8Array): Promise<Uint8Array | null>
+  set(key: Uint8Array, value: Uint8Array): Promise<void>
+  delete(key: Uint8Array): Promise<void>
+  entries(range?: KeyRange): AsyncIterableIterator<[Uint8Array, Uint8Array]>
+
+  close?(): Promise<void>
+}
+
+type KeyRange = {
+  reverse?: boolean
+  lowerBound?: { key: Uint8Array; inclusive: boolean }
+  upperBound?: { key: Uint8Array; inclusive: boolean }
+}
+```
+
+You can either use okra-js with your own implementation of `KeyValueStore`, or one of the two first-party packages:
+
+- [`@canvas-js/okra-memory`](./packages/okra-memory/), backed by an in-memory red/black tree
+- [`@canvas-js/okra-idb`](./packages/okra-idb/), backed by an IndexedDB object store
+
+The examples here all use `@canvas-js/okra-memory` for simplicity.
+
+> ⚠️ Never try to directly access or mutate the entries of the underlying key/value store. Only interact with the store through the public `Tree` methods.
 
 ### Opening a tree
 
-Import the `Tree` class and pass an abstract-level instance into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
+Import the `Tree` class and pass a `store: KeyValueStore` into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
 
 ```ts
 import { Tree } from "@canvas-js/okra"
-import { MemoryLevel } from "memory-level"
+import { MemoryStore } from "@canvas-js/okra-memory"
 
-const tree = await Tree.open(new MemoryLevel())
+const tree = await Tree.open(new MemoryStore())
 ```
+
+You can override the default internal hash size and target fanout degree by passing a second argument `options?: { K?: number, Q?: number }` to `Tree.open`, although this is discouraged. If you do, be sure to pass the same values every time you open the tree.
 
 ### Getting, setting, and deleting entries
 
 The tree can be used as a normal key/value store with `.get`, `.set`, and `.delete` methods.
-
-> ⚠️ Concurrent calls to `.set` and `.delete` **WILL cause internal corruption** - you must always use `await`, locks, a queue, or some other kind of concurrency control.
-
-Setting or deleting an entry translates into several `put` and `del` operations in the underlying `abstract-level` database. The `abstract-level` interface only offers "transactions" in the form of batched operations, which isn't suitable for dynamic internal tree maintenance. As a result, `.set` and `.delete` have weak consistency properties: if a underlying `put` or `del` fails, it will leave the tree in a corrupted state. If this happens, it can be corrected with a call to `await tree.rebuild()`.
-
-If atomic and consistent transactions are important to you, consider using the native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra), which has fully ACID transactions and a multi-reader single-writer concurrency model.
-
-You can override the default internal hash size and target fanout degree by passing `{ K: number, Q: number }` into `Tree.open`, although this is discouraged.
 
 ```js
 const encoder = new TextEncoder()
@@ -69,11 +89,24 @@ await tree.set(encoder.encode("c"), encoder.encode("baz"))
 
 await tree.get(encoder.encode("a"))
 // <Buffer 66 6f 6f>
+
+await tree.delete(encoder.encode("a"))
+await tree.get(encoder.encode("a"))
+// null
 ```
+
+> ⚠️ Concurrent calls to `.set` or `.delete` will cause internal corruption - you must always use `await`, locks, a queue, or some other kind of concurrency control.
+
+Setting or deleting an entry translates into several sets and deletes in the underlying store. As a result, if a underlying `tree.store.set()` or `tree.store.delete()` fails, it will leave the tree in a corrupted state. There are two ways to recover from this:
+
+- If your underlying store supports transactions that can be aborted, implement the `KeyValueStore` interface as a wrapper around a transaction object, not the database itself, and open a new tree over a new transaction for every set of changes you want to make. Then, if an operation fails, abort the transaction.
+- If your underlying store doesn't support transactions and a set or delete fails, the tree can be repaired with a call to `await tree.rebuild()`. However, this can be expensive for large databases.
+
+If atomic and consistent transactions are important to you, consider using the native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra), which has fully ACID transactions and a multi-reader single-writer concurrency model.
 
 ### Iterating over ranges of entries
 
-You can iterate over ranges of entries with `tree.entries()`, which takes an optional inclusive lower bound and an optional exclusive uppper bound.
+You can iterate over ranges of entries with `tree.entries()`.
 
 ```ts
 import { collect } from "@canvas-js/okra"
@@ -85,14 +118,19 @@ await collect(tree.entries())
 //   [ <Buffer 63>, <Buffer 62 61 7a> ]
 // ]
 
-await collect(tree.entries(null, null, { reverse: true }))
+await collect(tree.entries({ reverse: true }))
 // [
 //   [ <Buffer 63>, <Buffer 62 61 7a> ],
 //   [ <Buffer 62>, <Buffer 62 61 72> ],
 //   [ <Buffer 61>, <Buffer 66 6f 6f> ]
 // ]
 
-await collect(tree.entries(encoder.encode("b"), encoder.encode("c")))
+await collect(
+  tree.entries({
+    lowerBound: { key: encoder.encode("b"), inclusive: true },
+    upperBound: { key: encoder.encode("c"), inclusive: false },
+  })
+)
 // [
 //	 [ <Buffer 62>, <Buffer 62 61 72> ]
 // ]
@@ -100,7 +138,7 @@ await collect(tree.entries(encoder.encode("b"), encoder.encode("c")))
 
 ### Exposing the internal merkle search tree
 
-You can access the internal merkle tree nodes using the `getRoot` and `getChildren` methods. These are the methods that must be accessible to other okra databases, such as over an HTTP API. okra-js itself is transport-agnostic.
+You can access the internal merkle tree nodes using the `getRoot`, `getNode`, and `getChildren` methods. These are the methods that must be accessible to other okra databases, such as over a WebSocket connection. okra-js itself is transport-agnostic.
 
 ```ts
 await tree.getRoot()
@@ -151,10 +189,11 @@ interface Source {
 
 ```ts
 import { Tree, collect } from "@canvas-js/okra"
+import { MemoryStore } from "@canvas-js/okra-memory"
 
 // create two in-memory trees
-const source = await Tree.open(new MemoryLevel())
-const target = await Tree.open(new MemoryLevel())
+const source = await Tree.open(new MemoryStore())
+const target = await Tree.open(new MemoryStore())
 
 // initialize them with the same 256 random entries
 for (let i = 0; i < 256; i++) {
@@ -196,7 +235,7 @@ await collect(target.delta(source))
 
 `Tree.prototype.delta` is the lowest-level form of syncing. It is an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a `Uint8Array`. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
 
-> ⚠️ Syncing **will fail if the source is concurrently modified**. This is because abstract-level does not support proper snapshots with transactions.
+> ⚠️ Syncing **will fail if the source is concurrently modified**.
 
 This means that your implementation of sync transport will need some concept of "sessions" so that okra-js sources can queue pending calls to `.set` and `.delete` when a session is active, and resume handling them when the session ends. This could be done with an async queue like[ `p-queue`](https://github.com/sindresorhus/p-queue) or using locks from e.g. the [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API). In the future, okra-js may enforce locking itself, but for now it is left to the user.
 
@@ -299,7 +338,7 @@ console.log(await text(tree.print())) // hash size defaults to 4 bytes for reada
 //             ├─ 684f1047 | 62
 //             └─ 56cb13c7 | 63
 
-const bigTree = await Tree.open(new MemoryLevel())
+const bigTree = await Tree.open(new MemoryStore())
 for (let i = 0; i < 256; i++) {
   const key = new Uint8Array([i])
   await bigTree.set(key, sha256(key))
@@ -322,8 +361,7 @@ Entry values are not printed; the rightmost column is the list of keys of the le
 
 ## Testing
 
-Tests are run with [AVA](https://github.com/avajs/ava) and live in [./test/\*.test.ts](./test). They use [memory-level](https://github.com/Level/memory-level) for the underlying database.
-
+Tests are run with [AVA](https://github.com/avajs/ava) and live in [./test/\*.test.ts](./test).
 ```
 npm run test
 ```
@@ -333,8 +371,6 @@ The two most important things covered by the tests are 1) correctness of the tre
 ## API
 
 ```ts
-declare type Entry = [key: Uint8Array, value: Uint8Array]
-
 declare type Key = Uint8Array | null
 
 // value is undefined for level > 0 || key === null,
@@ -354,33 +390,32 @@ declare interface Source {
   getChildren(level: number, key: Key): Promise<Node[]>
 }
 
-/**
- * You should never have to instantiate the generic type parameters manually.
- * Just pass an abstract-level instance to Tree.open and the TypeScript
- * compiler should be able to infer the rest.
- */
-declare class Tree<TFormat = any, KDefault = any, VDefault = any> implements Source {
-  public readonly db: AbstractLevel<TFormat, KDefault, VDefault>
-  public readonly K: number
-  public readonly Q: number
+declare type KeyRange = {
+  reverse?: boolean
+  lowerBound?: { key: Uint8Array; inclusive: boolean }
+  upperBound?: { key: Uint8Array; inclusive: boolean }
+}
 
-  public static open<TFormat, KDefault, VDefault>(
-    db: AbstractLevel<TFormat, KDefault, VDefault>,
-    options?: { K?: number; Q?: number }
-  ): Promise<Tree<TFormat, KDefault, VDefault>>
+interface KeyValueStore {
+  get(key: Uint8Array): Promise<Uint8Array | null>
+  set(key: Uint8Array, value: Uint8Array): Promise<void>
+  delete(key: Uint8Array): Promise<void>
+  entries(range?: KeyRange): AsyncIterableIterator<[Uint8Array, Uint8Array]>
 
-  // closes the underlying AbstractLevel database
+  close?(): Promise<void>
+}
+
+declare class Tree implements Source {
+  public static open(store: KeyValueStore, options?: { K?: number; Q?: number }): Promise<Tree>
+
+  // closes the underlying store
   public close(): Promise<void>
 
   // external key/value interface
   public get(key: Uint8Array): Promise<Uint8Array | null>
   public set(key: Uint8Array, value: Uint8Array): Promise<void>
   public delete(key: Uint8Array): Promise<void>
-  public entries(
-    lowerBound?: Uint8Array | null,
-    upperBound?: Uint8Array | null,
-    options?: { reverse?: boolean }
-  ): AsyncIterableIterator<Entry>
+  public entries(range?: KeyRange): AsyncIterableIterator<[key: Uint8Array, value: Uint8Array]>
 
   // access internal merkle tree nodes
   public getRoot(): Promise<Node>

@@ -1,0 +1,36 @@
+{
+	"private": true,
+	"name": "@canvas-js/okra",
+	"description": "Internal okra database operations over an abstract NodeStore interface",
+	"version": "0.0.0",
+	"type": "module",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib/**/*.js",
+		"lib/**/*.d.ts"
+	],
+	"scripts": {
+		"test": "ava"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/canvasxyz/okra-js.git"
+	},
+	"author": "Joel Gustafson",
+	"license": "MIT",
+	"devDependencies": {
+		"@ava/typescript": "^4.0.0",
+		"@types/node": "^18.15.11",
+		"ava": "^5.2.0",
+		"nanoid": "^4.0.2",
+		"prando": "^6.0.1",
+		"typescript": "^5.0.3"
+	},
+	"dependencies": {
+		"@noble/hashes": "^1.2.0",
+		"@types/debug": "^4.1.7",
+		"abstract-level": "^1.0.3",
+		"debug": "^4.3.4"
+	}
+}

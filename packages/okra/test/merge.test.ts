@@ -1,11 +1,8 @@
 import test, { ExecutionContext } from "ava"
 import Prando from "prando"
 
-import { getKey, compareEntries, getDB } from "./utils.js"
 import { Builder, Tree } from "@canvas-js/okra"
-
-const K = 16
-const Q = 4
+import { getKey, compareEntries, getStore } from "./utils.js"
 
 /**
  * testMerge creates identical trees A and B with the same entries:
@@ -27,8 +24,9 @@ async function testMerge(
 ): Promise<void> {
 	const rng = new Prando(seed)
 
-	const [dbA, dbB] = [getDB(t), getDB(t)]
-	const [builderA, builderB] = await Promise.all([Builder.open(dbA, { K, Q }), Builder.open(dbB, { K, Q })])
+	const metadata = { K: 16, Q: 4 }
+	const [storeA, storeB] = [getStore(t), getStore(t)]
+	const [builderA, builderB] = await Promise.all([Builder.open(storeA, metadata), Builder.open(storeB, metadata)])
 
 	for (let i = 0; i < count; i++) {
 		const value = new Uint8Array([rng.nextInt(0, 255)])
@@ -37,7 +35,7 @@ async function testMerge(
 
 	await Promise.all([builderA.finalize(), builderB.finalize()])
 
-	const [a, b] = await Promise.all([Tree.open(dbA, { K, Q }), Tree.open(dbB, { K, Q })])
+	const [a, b] = await Promise.all([Tree.open(storeA, metadata), Tree.open(storeB, metadata)])
 
 	for (let i = 0; i < deltaA; i++) {
 		const key = getKey(rng.nextInt(0, count - 1))
@@ -49,17 +47,6 @@ async function testMerge(
 		const key = getKey(rng.nextInt(0, count - 1))
 		const value = new Uint8Array([rng.nextInt(0, 255)])
 		await a.set(key, value)
-	}
-
-	async function merge(source: Tree, target: Tree) {
-		for await (const delta of target.delta(source)) {
-			t.true(delta.source !== null && delta.source.byteLength === 1)
-			t.true(delta.target !== null && delta.target.byteLength === 1)
-			const sourceValue = delta.source?.at(0) ?? 0
-			const targetValue = delta.source?.at(0) ?? 0
-			const mergedValue = Math.max(sourceValue, targetValue)
-			await target.set(delta.key, new Uint8Array([mergedValue]))
-		}
 	}
 
 	await a.merge(b, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))

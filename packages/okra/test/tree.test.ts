@@ -2,35 +2,21 @@ import test, { ExecutionContext } from "ava"
 
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { Builder, Tree, getLeafAnchorHash } from "@canvas-js/okra"
+import { Builder, Tree } from "@canvas-js/okra"
 
-import { compareEntries, getDB, iota, shuffle, encodingOptions } from "./utils.js"
+import { compareEntries, getStore, iota, shuffle } from "./utils.js"
 
-const K = 16
-const Q = 4
-
-test("Tree.open", async (t) => {
-	const db = getDB(t)
-	const tree = await Tree.open(db, { K, Q })
+test("open tree", async (t) => {
+	const tree = await Tree.open(getStore(t))
 	const root = await tree.getRoot()
-	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from(getLeafAnchorHash({ K })) })
+	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from("af1349b9f5f9a1a6a0404dea36dcc949", "hex") })
 })
 
-test("Tree.set", async (t) => {
-	const db = getDB(t)
-	const tree = await Tree.open(db, { K, Q })
+test("get/set/delete", async (t) => {
+	const tree = await Tree.open(getStore(t))
 	await tree.set(Buffer.from("a"), Buffer.from("foo"))
 	await tree.set(Buffer.from("a"), Buffer.from("bar"))
-
 	t.deepEqual(await tree.get(Buffer.from("a")), Buffer.from("bar"))
-})
-
-test("Tree.delete", async (t) => {
-	const db = getDB(t)
-	const tree = await Tree.open(db, { K, Q })
-	await tree.set(Buffer.from("a"), Buffer.from("foo"))
-	await tree.set(Buffer.from("b"), Buffer.from("bar"))
-	t.deepEqual(await tree.get(Buffer.from("a")), Buffer.from("foo"))
 	await tree.delete(Buffer.from("a"))
 	t.deepEqual(await tree.get(Buffer.from("a")), null)
 	await tree.delete(Buffer.from("a"))
@@ -40,11 +26,17 @@ test("Tree.delete", async (t) => {
 const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
 	t.timeout(60 * 1000)
 
-	const db = getDB(t)
-	const tree = await Tree.open(db, { K, Q })
+	const store = getStore(t)
+	const tree = await Tree.open(store, { K: 16, Q: 4 })
 	for (const [key, value] of iota(count)) {
 		await tree.set(key, value)
 	}
+
+	// console.log(await text(tree.print()))
+
+	// for await (const [key, value] of store.db.iterator()) {
+	// 	t.log(hex(key), hex(value))
+	// }
 
 	const root = await tree.getRoot()
 	t.is(root.level, rootLevel)
@@ -59,7 +51,7 @@ const testShuffleIota =
 	(count: number, rootLevel: number, rootHashPrefix: string, iters: number) => async (t: ExecutionContext) => {
 		t.timeout(Math.max(5 * 60 * 1000, iters * count))
 
-		const builder = await Builder.open(getDB(t), { K, Q })
+		const builder = await Builder.open(getStore(t), { K: 16, Q: 4 })
 
 		const entries: [Uint8Array, Uint8Array][] = []
 		for (const [key, value] of iota(count)) {
@@ -75,17 +67,18 @@ const testShuffleIota =
 			t.log(`iteration ${i + 1}/${iters}`)
 
 			shuffle(entries)
-			const tree = await Tree.open(getDB(), { K, Q })
+			const store = getStore(t)
+			const tree = await Tree.open(store, { K: 16, Q: 4 })
 			try {
 				for (const [key, value] of entries) {
 					await tree.set(key, value)
 				}
 
 				t.deepEqual(await tree.getRoot(), root)
-				const delta = await compareEntries(t, builder.db.iterator(encodingOptions), tree.db.iterator(encodingOptions))
+				const delta = await compareEntries(t, store.db.iterator(), store.db.iterator())
 				t.is(delta, 0)
 			} finally {
-				tree.db.close()
+				await store.close()
 			}
 		}
 	}

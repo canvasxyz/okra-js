@@ -3,13 +3,10 @@ import test, { ExecutionContext } from "ava"
 import { Builder } from "@canvas-js/okra"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { getDB, iota } from "./utils.js"
-
-const K = 16
-const Q = 4
+import { getStore, iota } from "./utils.js"
 
 const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
-	const builder = await Builder.open(getDB(t), { K, Q })
+	const builder = await Builder.open(getStore(t), { K: 16, Q: 4 })
 	for (const [key, value] of iota(count)) {
 		await builder.set(key, value)
 	}

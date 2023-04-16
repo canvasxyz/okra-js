@@ -1,8 +1,11 @@
 {
-	"include": ["src"],
-	"extends": "./tsconfig.base.json",
-	"compilerOptions": {
-		"outDir": "lib",
-		"rootDir": "src"
-	}
+	"files": [],
+	"references": [
+		{ "path": "./packages/okra" },
+		{ "path": "./packages/okra/test" },
+		{ "path": "./packages/okra-idb" },
+		{ "path": "./packages/okra-idb/test" },
+		{ "path": "./packages/okra-memory" },
+		{ "path": "./packages/okra-memory/test" }
+	]
 }

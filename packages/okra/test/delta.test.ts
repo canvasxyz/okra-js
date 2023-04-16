@@ -4,9 +4,6 @@ import { Delta, collect } from "@canvas-js/okra"
 
 import { getKey, defaultValue, random, initialize, iota } from "./utils.js"
 
-const K = 16
-const Q = 4
-
 async function testDelta(
 	t: ExecutionContext,
 	seed: string,
@@ -15,8 +12,8 @@ async function testDelta(
 	deleteTarget: number
 ): Promise<void> {
 	const [source, target] = await Promise.all([
-		initialize(t, iota(count), { K, Q }),
-		initialize(t, iota(count), { K, Q }),
+		initialize(t, iota(count), { K: 16, Q: 4 }),
+		initialize(t, iota(count), { K: 16, Q: 4 }),
 	])
 
 	const expected: Delta[] = []

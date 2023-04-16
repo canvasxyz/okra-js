@@ -1,27 +1,18 @@
+import { Node, Key, Source, Delta, NodeRange } from "./interface.js"
 import { Tree } from "./tree.js"
-import { Node, Key, Source, Delta } from "./types.js"
 import { debug } from "./format.js"
-import {
-	assert,
-	createEntryKey,
-	encodingOptions,
-	entryToNode,
-	equalArrays,
-	equalKeys,
-	equalNodes,
-	lessThan,
-} from "./utils.js"
+import { assert, equalArrays, equalKeys, equalNodes, lessThan } from "./utils.js"
 
-import { AbstractIterator } from "abstract-level"
+const next = (iter: AsyncIterableIterator<Node>) => iter.next().then(({ done, value }) => (done ? null : value))
 
-export class Driver<TFormat, KDefault, VDefault> {
+export class Driver {
 	private static indent = "| "
 
 	private depth = 0
 	private formatter = debug("okra:sync")
 	private leafCursor: Key = null
 
-	constructor(readonly source: Source, readonly target: Tree<TFormat, KDefault, VDefault>) {}
+	constructor(readonly source: Source, readonly target: Tree) {}
 
 	private log(format: string, ...args: any[]) {
 		this.formatter("%s" + format, Driver.indent.repeat(this.depth), ...args)
@@ -44,14 +35,12 @@ export class Driver<TFormat, KDefault, VDefault> {
 		} else {
 			yield* this.deltaRoot(targetRoot, sourceRoot, null)
 			if (this.leafCursor !== null) {
-				const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
-					gte: createEntryKey(0, this.leafCursor),
-					lt: createEntryKey(1, null),
-					...encodingOptions,
-				})
+				const range: NodeRange = {
+					level: 0,
+					lowerBound: { key: this.leafCursor, inclusive: true },
+				}
 
-				for await (const entry of targetIter) {
-					const targetLeaf = entryToNode(entry, { K: this.target.K })
+				for await (const targetLeaf of this.target.iterate(range)) {
 					assert(targetLeaf.key !== null && targetLeaf.value !== undefined)
 					yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
 				}
@@ -109,15 +98,19 @@ export class Driver<TFormat, KDefault, VDefault> {
 			if (lessThan(this.leafCursor, sourceNode.key)) {
 				this.log("target leaf cursor %k is behind source node key", this.leafCursor)
 				this.log("yielding missing entries...")
-				const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
-					gte: createEntryKey(0, this.leafCursor),
-					lt: createEntryKey(0, sourceNode.key),
-					...encodingOptions,
-				})
 
-				for await (const entry of targetIter) {
-					const targetLeaf = entryToNode(entry, { K: this.target.K })
-					assert(targetLeaf.level == 0 && targetLeaf.key !== null && targetLeaf.value !== undefined)
+				const range: NodeRange = {
+					level: 0,
+					lowerBound: { key: this.leafCursor, inclusive: true },
+					upperBound: { key: sourceNode.key, inclusive: false },
+				}
+
+				for await (const targetLeaf of this.target.iterate(range)) {
+					if (targetLeaf.key === null) {
+						continue
+					}
+
+					assert(targetLeaf.level == 0 && targetLeaf.value !== undefined)
 					yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
 				}
 
@@ -128,20 +121,20 @@ export class Driver<TFormat, KDefault, VDefault> {
 			if (targetNode !== null && equalNodes(sourceNode, targetNode)) {
 				this.log("skipping subtree")
 
-				const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
-					gt: createEntryKey(targetNode.level, targetNode.key),
-					lt: createEntryKey(targetNode.level + 1, null),
-					...encodingOptions,
-				})
+				const range: NodeRange = {
+					level: targetNode.level,
+					lowerBound: { key: targetNode.key, inclusive: false },
+				}
 
-				try {
-					const nextTargetNode = await this.next(targetIter)
-					this.leafCursor = nextTargetNode && nextTargetNode.key
+				for await (const nextTargetNode of this.target.iterate(range)) {
+					this.leafCursor = nextTargetNode.key
 					this.log("set leaf cursor to %k", this.leafCursor)
 					return
-				} finally {
-					await targetIter.close()
 				}
+
+				this.leafCursor = null
+				this.log("set leaf cursor to %k", this.leafCursor)
+				return
 			}
 
 			if (sourceNode.level > 1) {
@@ -150,30 +143,11 @@ export class Driver<TFormat, KDefault, VDefault> {
 					const sourceChildLimit = i === sourceChildren.length - 1 ? sourceLimit : sourceChildren[i + 1].key
 					yield* this.deltaNode(sourceChild, sourceChildLimit)
 				}
-				// } else if (targetNode === null) {
-				// 	const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
-				// 	for (const sourceLeaf of sourceChildren) {
-				// 		if (sourceLeaf.key === null) {
-				// 			continue
-				// 		}
-
-				// 		assert(sourceLeaf.level === 0 && sourceLeaf.value !== undefined)
-				// 		yield { key: sourceLeaf.key, source: sourceLeaf.value, target: null }
-				// 	}
 			} else {
 				yield* this.deltaLeaf(sourceNode, sourceLimit)
 			}
 		} finally {
 			this.depth -= 1
-		}
-	}
-
-	private async next<T>(iter: AbstractIterator<T, Uint8Array, Uint8Array>): Promise<Node | null> {
-		const entry = await iter.next()
-		if (entry === undefined) {
-			return null
-		} else {
-			return entryToNode(entry, { K: this.target.K })
 		}
 	}
 
@@ -184,14 +158,19 @@ export class Driver<TFormat, KDefault, VDefault> {
 
 		this.log("yielding missing entries via explicit leaf iteration")
 
-		const targetIter = this.target.db.iterator<Uint8Array, Uint8Array>({
-			gte: createEntryKey(0, sourceNode.key),
-			lt: sourceLimit === null ? createEntryKey(1, null) : createEntryKey(0, sourceLimit),
-			...encodingOptions,
-		})
+		const range: NodeRange = {
+			level: 0,
+			lowerBound: { key: sourceNode.key, inclusive: true },
+		}
+
+		if (sourceLimit !== null) {
+			range.upperBound = { key: sourceLimit, inclusive: false }
+		}
+
+		const targetNodes = this.target.iterate(range)
 
 		try {
-			let targetLeaf = await this.next(targetIter)
+			let targetLeaf = await next(targetNodes)
 
 			for (const sourceLeaf of sourceChildren) {
 				this.log("- got source leaf: %n", sourceLeaf)
@@ -215,7 +194,7 @@ export class Driver<TFormat, KDefault, VDefault> {
 						yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
 					}
 
-					targetLeaf = await this.next(targetIter)
+					targetLeaf = await next(targetNodes)
 					if (targetLeaf === null) {
 						this.log("- new target leaf: null")
 					} else {
@@ -234,17 +213,17 @@ export class Driver<TFormat, KDefault, VDefault> {
 						yield { key: sourceLeaf.key, source: sourceLeaf.value, target: targetLeaf.value }
 					}
 
-					targetLeaf = await this.next(targetIter)
+					targetLeaf = await next(targetNodes)
 				}
 			}
 
 			this.log("done yielding leaves")
-			// this.log("setting leaf cursor to", sourceLimit)
-			// this.leafCursor = sourceLimit
 			this.leafCursor = targetLeaf === null ? sourceLimit : targetLeaf.key
 			this.log("set leaf cursor to", this.leafCursor)
 		} finally {
-			await targetIter.close()
+			if (targetNodes.return) {
+				await targetNodes.return()
+			}
 		}
 	}
 }
