@@ -1,28 +1,7 @@
 import { Node, Key, Source, Target, Delta, Bound } from "./interface.js"
 
 import { debug } from "./format.js"
-import { assert, equalArrays, equalKeys, equalNodes, isInRange, lessThan } from "./utils.js"
-
-/**
- * Unwrap an `IteratorResult<T>` into `T | null`
- */
-const next = <T>(iter: AsyncIterator<T, void, undefined>) =>
-	iter.next().then(({ done, value }) => (done ? null : value))
-
-/**
- * Return an exclusive upper bound for the next node in `nodes` after `index`,
- * or the given `upperBound` if `nodes[index]` is the last element.
- */
-function getUpperBound(nodes: Node[], index: number, upperBound: Bound<Uint8Array> | null): Bound<Uint8Array> | null {
-	if (index === nodes.length - 1) {
-		return upperBound
-	} else {
-		const node = nodes[index + 1]
-		assert(node !== undefined, "next node not found")
-		assert(node.key !== null, "next node key was not null")
-		return { key: node.key, inclusive: false }
-	}
-}
+import { assert, equalArrays, equalKeys, equalNodes, lessThan } from "./utils.js"
 
 export class Driver {
 	private static indent = "│ "
@@ -31,11 +10,17 @@ export class Driver {
 	private formatter = debug("okra:sync")
 
 	/**
-	 * Syncing progresses from left to right, starting at the `null` anchor key.
-	 * `cursor` is a pointer in the target tree range that is advanced in two ways:
-	 * 1. identifying and skipping a common subtree, which sets cursor to an
-	 *    inclusive bound at the first target key after the end of the subtree range.
-	 * 2.
+	 * Syncing progresses from left to right and is tracked by a `cursor: Bound<Key>`
+	 * in the target tree range, which starts at `{ key: null, inclusive: false }`.
+	 * The cursor is advanced in three ways:
+	 * 1. identifying and skipping a common subtree, which sets the cursor to an
+	 *    inclusive bound at the first target key after the end of the subtree range,
+	 *    or `null` if there are no more nodes at that level.
+	 * 2. the `advance` method, which is called at the end of every `syncNodes` and
+	 *    yields deltas for any remaining target entries between the current cursor
+	 *    and the start of the next source node (`sourceUpperBound`). `advance` sets
+	 *    the cursor to `sourceUpperBound` or `null` if there are no more leaf nodes.
+	 * 3. `syncLeaves`, which
 	 */
 	private cursor: Bound<Key> | null = null
 
@@ -46,8 +31,7 @@ export class Driver {
 	}
 
 	public async *sync(): AsyncGenerator<Delta, void, undefined> {
-		const sourceRoot = await this.source.getRoot()
-		const targetRoot = await this.target.getRoot()
+		const [sourceRoot, targetRoot] = await Promise.all([this.source.getRoot(), this.target.getRoot()])
 
 		this.log("DELTA")
 		this.depth += 1
@@ -59,22 +43,22 @@ export class Driver {
 
 		this.cursor = { key: null, inclusive: false }
 		if (sourceRoot.level > 0) {
-			yield* this.syncRoots(targetRoot, sourceRoot, null)
+			yield* this.syncRoots(sourceRoot, null, targetRoot)
 		}
 
-		yield* this.range(null)
+		yield* this.advance(null)
 	}
 
 	/**
 	 * The purpose of `syncRoots` is to align the entrypoints of the two trees.
 	 * If the target tree's root level is less than the source tree's root level,
-	 * we treat all of the nodes the source tree at the target root level as separete
-	 * roots and sync them all individually.
+	 * we treat all of the nodes the source tree at the target root level as
+	 * separate roots and call this.syncNodes with them all one by one.
 	 */
 	async *syncRoots(
-		targetRoot: Node,
 		sourceNode: Node,
-		sourceUpperBound: Bound<Uint8Array> | null
+		sourceUpperBound: Bound<Key> | null,
+		targetRoot: Node
 	): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncRoot")
 		this.depth += 1
@@ -83,90 +67,70 @@ export class Driver {
 		this.log("target root: %n", targetRoot)
 		assert(targetRoot.key === null)
 
-		try {
-			if (sourceNode.level > targetRoot.level) {
-				const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
-				if (targetRoot.level === 0 && sourceNode.level === 1) {
-					for (const { key, value: sourceValue } of sourceChildren) {
-						if (key === null) {
-							continue
-						}
-
-						assert(sourceValue !== undefined, "invalid leaf node")
-						yield { key, source: sourceValue, target: null }
-					}
-				} else {
-					for (const [i, sourceChild] of sourceChildren.entries()) {
-						const sourceChildUpperBound = getUpperBound(sourceChildren, i, sourceUpperBound)
-						yield* this.syncRoots(targetRoot, sourceChild, sourceChildUpperBound)
-					}
+		if (sourceNode.level === 1 && targetRoot.level === 0) {
+			const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
+			for (const { key, value: sourceValue } of sourceChildren) {
+				if (key === null) {
+					continue
 				}
-			} else {
-				yield* this.syncNodes(sourceNode, sourceUpperBound)
+
+				assert(sourceValue !== undefined, "invalid leaf node")
+				yield { key, source: sourceValue, target: null }
 			}
-		} finally {
-			this.depth -= 1
+		} else if (sourceNode.level > targetRoot.level) {
+			const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
+			for (const [sourceChild, sourceChildUpperBound] of withUpperBounds(sourceChildren, sourceUpperBound)) {
+				yield* this.syncRoots(sourceChild, sourceChildUpperBound, targetRoot)
+			}
+		} else {
+			yield* this.syncNodes(sourceNode, sourceUpperBound)
 		}
+
+		this.depth -= 1
 	}
 
-	async *syncNodes(
-		sourceNode: Node,
-		sourceUpperBound: Bound<Uint8Array> | null
-	): AsyncGenerator<Delta, void, undefined> {
+	async *syncNodes(sourceNode: Node, sourceUpperBound: Bound<Key> | null): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncNode")
 		this.depth += 1
 
-		try {
-			const targetNode = await this.target.getNode(sourceNode.level, sourceNode.key)
-			this.log("source node: %n", sourceNode)
-			this.log("target node: %n", targetNode)
+		const targetNode = await this.target.getNode(sourceNode.level, sourceNode.key)
+		this.log("source node: %n", sourceNode)
+		this.log("target node: %n", targetNode)
 
-			if (targetNode !== null && equalNodes(sourceNode, targetNode)) {
-				this.log("skipping subtree")
+		if (targetNode !== null && equalArrays(targetNode.hash, sourceNode.hash)) {
+			this.log("skipping subtree")
 
-				const lowerBound = { key: targetNode.key, inclusive: false }
-				for await (const { key } of this.target.nodes(targetNode.level, lowerBound)) {
-					this.cursor = { key, inclusive: true }
-					this.log("moved cursor to %b", this.cursor)
-					return
-				}
-
+			const nextSibling = await this.getNextSibling(targetNode.level, targetNode.key)
+			if (nextSibling === null) {
 				this.cursor = null
-				this.log("moved cursor to %b", this.cursor)
-				return
-			}
-
-			if (sourceNode.level > 1) {
-				const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
-				for (const [i, sourceChild] of sourceChildren.entries()) {
-					const sourceChildUpperBound = getUpperBound(sourceChildren, i, sourceUpperBound)
-					yield* this.syncNodes(sourceChild, sourceChildUpperBound)
-				}
 			} else {
-				yield* this.syncLeaves(sourceNode, sourceUpperBound)
+				this.cursor = { key: nextSibling.key, inclusive: true }
 			}
-		} finally {
-			yield* this.range(sourceUpperBound)
-			this.depth -= 1
+		} else if (sourceNode.level === 1) {
+			yield* this.syncLeaves(sourceNode, sourceUpperBound)
+		} else {
+			const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
+			for (const [sourceChild, sourceChildUpperBound] of withUpperBounds(sourceChildren, sourceUpperBound)) {
+				yield* this.syncNodes(sourceChild, sourceChildUpperBound)
+			}
 		}
+
+		yield* this.advance(sourceUpperBound)
+		this.depth -= 1
 	}
 
 	private async *syncLeaves(
 		sourceNode: Node,
-		sourceUpperBound: Bound<Uint8Array> | null
+		sourceUpperBound: Bound<Key> | null
 	): AsyncGenerator<Delta, void, undefined> {
 		assert(sourceNode.level === 1)
-
-		const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
-
 		this.log("yielding missing entries via explicit leaf iteration")
 
-		const lowerBound = { key: sourceNode.key, inclusive: true }
-		const targetNodes = this.target.nodes(0, lowerBound, sourceUpperBound)
-
+		const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
+		const iter = this.target.nodes(0, { key: sourceNode.key, inclusive: true }, sourceUpperBound)
+		let targetLeaf: Node | null = null
 		try {
-			let targetLeaf = await next(targetNodes)
-
+			targetLeaf = await next(iter)
 			for (const sourceLeaf of sourceChildren) {
 				this.log("- got source leaf: %n", sourceLeaf)
 				this.log("- got target leaf: %n", targetLeaf)
@@ -177,15 +141,14 @@ export class Driver {
 
 				assert(sourceLeaf.level === 0 && sourceLeaf.value !== undefined)
 
-				// advance if necessary
+				// advance the target leaf if necessary
 				while (targetLeaf !== null && lessThan(targetLeaf.key, sourceLeaf.key)) {
 					if (targetLeaf.key !== null) {
 						assert(targetLeaf.value !== undefined)
-						// assert(targetLeaf.key !== null && targetLeaf.value !== undefined)
 						yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
 					}
 
-					targetLeaf = await next(targetNodes)
+					targetLeaf = await next(iter)
 					this.log("- new target leaf: %n", targetLeaf)
 				}
 
@@ -198,20 +161,34 @@ export class Driver {
 						yield { key: sourceLeaf.key, source: sourceLeaf.value, target: targetLeaf.value }
 					}
 
-					targetLeaf = await next(targetNodes)
+					targetLeaf = await next(iter)
 				}
 			}
-
-			this.log("done yielding leaves")
-			this.cursor = targetLeaf ? { key: targetLeaf.key, inclusive: targetLeaf.key !== null } : sourceUpperBound
-			this.log("moved cursor to %b", this.cursor)
 		} finally {
-			// the node iterator might have cleanup work to do
-			await targetNodes.return?.()
+			if (targetLeaf !== null && iter.return !== undefined) {
+				await iter.return()
+			}
 		}
+
+		this.log("done yielding leaves")
+		if (targetLeaf === null) {
+			this.cursor = sourceUpperBound
+		} else {
+			this.cursor = { key: targetLeaf.key, inclusive: targetLeaf.key !== null }
+		}
+
+		this.log("moved cursor to %b", this.cursor)
 	}
 
-	private async *range(sourceUpperBound: Bound<Uint8Array> | null): AsyncGenerator<Delta, void, undefined> {
+	private async getNextSibling(level: number, key: Key): Promise<Node | null> {
+		for await (const node of this.target.nodes(level, { key, inclusive: false })) {
+			return node
+		}
+
+		return null
+	}
+
+	private async *advance(sourceUpperBound: Bound<Key> | null): AsyncGenerator<Delta, void, undefined> {
 		if (this.cursor === null) {
 			return
 		}
@@ -222,5 +199,25 @@ export class Driver {
 		}
 
 		this.cursor = sourceUpperBound
+	}
+}
+
+/**
+ * Unwrap an `IteratorResult<T>` into `T | null`
+ */
+const next = <T>(iter: AsyncIterator<T, void, undefined>) =>
+	iter.next().then(({ done, value }) => (done ? null : value))
+
+/**
+ * Zips each node with an exclusive upper bound for the next node in `nodes`,
+ * or the given `upperBound` for the last element.
+ */
+function* withUpperBounds(nodes: Node[], upperBound: Bound<Key> | null): Generator<[Node, Bound<Key> | null]> {
+	for (const [i, node] of nodes.entries()) {
+		if (i === nodes.length - 1) {
+			yield [node, upperBound]
+		} else {
+			yield [node, { key: nodes[i + 1].key, inclusive: false }]
+		}
 	}
 }
