@@ -1,4 +1,4 @@
-import type { KeyValueStore, KeyRange } from "@canvas-js/okra"
+import type { Bound, KeyValueStore } from "@canvas-js/okra"
 import type { AbstractIteratorOptions } from "abstract-level"
 
 import { MemoryLevel } from "memory-level"
@@ -31,22 +31,26 @@ export class MemoryStore implements KeyValueStore {
 		await this.db.del(key)
 	}
 
-	async *entries(range: KeyRange = {}): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
-		const iterOptions: AbstractIteratorOptions<Uint8Array, Uint8Array> = { reverse: range.reverse ?? false }
+	async *entries(
+		lowerBound: Bound<Uint8Array> | null = null,
+		upperBound: Bound<Uint8Array> | null = null,
+		{ reverse = false }: { reverse?: boolean } = {}
+	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
+		const iterOptions: AbstractIteratorOptions<Uint8Array, Uint8Array> = { reverse }
 
-		if (range.lowerBound) {
-			if (range.lowerBound.inclusive) {
-				iterOptions.gte = range.lowerBound.key
+		if (lowerBound) {
+			if (lowerBound.inclusive) {
+				iterOptions.gte = lowerBound.key
 			} else {
-				iterOptions.gt = range.lowerBound.key
+				iterOptions.gt = lowerBound.key
 			}
 		}
 
-		if (range.upperBound) {
-			if (range.upperBound.inclusive) {
-				iterOptions.lte = range.upperBound.key
+		if (upperBound) {
+			if (upperBound.inclusive) {
+				iterOptions.lte = upperBound.key
 			} else {
-				iterOptions.lt = range.upperBound.key
+				iterOptions.lt = upperBound.key
 			}
 		}
 

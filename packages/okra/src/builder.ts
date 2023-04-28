@@ -1,12 +1,14 @@
 import { blake3 } from "@noble/hashes/blake3"
 
-import { KeyValueStore, Metadata, NodeStore } from "./store.js"
-import { Key, Node } from "./interface.js"
+import { NodeStore } from "./store.js"
+import { Metadata, Key, Node, KeyValueStore } from "./interface.js"
 import { assert } from "./utils.js"
+import { DEFAULT_METADATA } from "./constants.js"
 
 export class Builder extends NodeStore {
-	public static async open(store: KeyValueStore, metadata: Metadata): Promise<Builder> {
+	public static async open(store: KeyValueStore, metadata: Metadata = DEFAULT_METADATA): Promise<Builder> {
 		const builder = new Builder(store, metadata)
+		await builder.initialize()
 		await builder.setNode({ level: 0, key: null, hash: builder.getLeafAnchorHash() })
 		return builder
 	}
@@ -31,7 +33,7 @@ export class Builder extends NodeStore {
 	}
 
 	private async buildLevel(level: number): Promise<number> {
-		const iter = this.iterate({ level })
+		const iter = this.nodes(level)
 
 		const next = () => iter.next().then(({ done, value }) => (done ? null : value))
 

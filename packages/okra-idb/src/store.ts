@@ -1,37 +1,46 @@
-import { IDBPDatabase, IDBPTransaction, IDBPObjectStore } from "idb"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import type { KeyValueStore, KeyRange } from "@canvas-js/okra"
+import { IDBPDatabase, IDBPTransaction } from "idb"
 
-export class IDBNodeStore<Mode extends IDBTransactionMode> implements KeyValueStore {
-	private txn: IDBPTransaction<unknown, [string], Mode> | null = null
+import { Bound, KeyValueStore, assert } from "@canvas-js/okra"
 
-	constructor(public readonly db: IDBPDatabase, public readonly storeName: string, public readonly mode: Mode) {}
+import { debug } from "./format.js"
 
-	private handleTxnComplete = () => {
-		console.log("transaction completed. setting thix.txn to null again")
-		this.txn = null
-	}
+export class IDBStore implements KeyValueStore {
+	private readonly log = debug("okra-idb:store")
 
-	private handleTxnAbort = () => {
-		console.log("transaction aborted. setting thix.txn to null again")
-		this.txn = null
-	}
+	public txn: IDBPTransaction<unknown, [string], IDBTransactionMode> | null = null
+	public constructor(private readonly db: IDBPDatabase, private readonly storeName: string) {}
 
-	private openStore(): IDBPObjectStore<unknown, [string], string, Mode> {
-		if (this.txn === null) {
-			console.log("creating new transaction")
-			this.txn = this.db.transaction([this.storeName], this.mode)
-			this.txn.addEventListener("complete", this.handleTxnComplete, { once: true })
-			this.txn.addEventListener("abort", this.handleTxnAbort, { once: true })
-		} else {
-			console.log("re-using existing transaction")
+	public async write<T>(callback: () => Promise<T>) {
+		this.txn = this.db.transaction(this.storeName, "readwrite")
+		try {
+			const result = await callback()
+			this.txn.commit()
+			return result
+		} catch (err) {
+			this.txn.abort()
+		} finally {
+			this.txn = null
 		}
+	}
 
-		return this.txn.objectStore(this.storeName)
+	public async read<T>(callback: () => Promise<T>) {
+		this.txn = this.db.transaction(this.storeName, "readonly")
+		try {
+			return await callback()
+		} finally {
+			this.txn.abort()
+			this.txn = null
+		}
 	}
 
 	async get(key: Uint8Array): Promise<Uint8Array | null> {
-		const store = this.openStore()
+		this.log(`get(%h})`, key)
+
+		assert(this.txn !== null, "Internal error: this.txn !== null")
+		const store = this.txn.objectStore(this.storeName)
+
 		const value = await store.get(key)
 		if (value === undefined) {
 			return null
@@ -43,44 +52,64 @@ export class IDBNodeStore<Mode extends IDBTransactionMode> implements KeyValueSt
 	}
 
 	async set(key: Uint8Array, value: Uint8Array): Promise<void> {
-		if (this.mode === "readonly") {
+		this.log(`set(%h, %h)`, key, value)
+
+		assert(this.txn !== null, "Internal error: this.txn !== null")
+		const store = this.txn.objectStore(this.storeName)
+		if (this.txn.mode === "readonly" || store.put === undefined) {
 			throw new Error("Cannot set in a read-only transaction")
 		}
 
-		const store = this.openStore()
-		await store.put!(value, key)
+		await store.put(value, key)
 	}
 
 	async delete(key: Uint8Array): Promise<void> {
-		if (this.mode === "readonly") {
+		console.log(`delete(%h})`, key)
+
+		assert(this.txn !== null, "Internal error: this.txn !== null")
+		const store = this.txn.objectStore(this.storeName)
+
+		if (this.txn.mode === "readonly" || store.delete === undefined) {
 			throw new Error("Cannot delete in a read-only transaction")
 		}
 
-		const store = this.openStore()
-		await store.delete!(key)
+		await store.delete(key)
 	}
 
-	async *entries({ reverse, upperBound, lowerBound }: KeyRange = {}): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
+	async *entries(
+		lowerBound: Bound<Uint8Array> | null = null,
+		upperBound: Bound<Uint8Array> | null = null,
+		{ reverse = false }: { reverse?: boolean } = {}
+	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		let query: IDBKeyRange | null = null
 		if (lowerBound && upperBound) {
 			query = IDBKeyRange.bound(lowerBound.key, upperBound.key, !lowerBound.inclusive, !upperBound.inclusive)
 		} else if (lowerBound) {
 			query = IDBKeyRange.lowerBound(lowerBound.key, !lowerBound.inclusive)
 		} else if (upperBound) {
-			query = IDBKeyRange.lowerBound(upperBound.key, !upperBound.inclusive)
+			query = IDBKeyRange.upperBound(upperBound.key, !upperBound.inclusive)
 		}
 
-		const store = this.openStore()
+		assert(this.txn !== null, "Internal error: this.txn !== null")
+		const store = this.txn.objectStore(this.storeName)
 		let cursor = await store.openCursor(query, reverse ? "prevunique" : "nextunique")
+
 		while (cursor !== null) {
-			if (cursor.key instanceof ArrayBuffer && cursor.value instanceof Uint8Array) {
-				yield [new Uint8Array(cursor.key), cursor.value]
+			let key: Uint8Array | null = null
+			if (cursor.key instanceof Uint8Array) {
+				key = cursor.key
+			} else if (cursor.key instanceof ArrayBuffer) {
+				key = new Uint8Array(cursor.key)
 			} else {
-				console.error(cursor.key, cursor.value)
-				throw new Error("Unexpected cursor value")
+				throw new Error("Unexpected cursor key type")
 			}
 
-			cursor = await cursor.continue()
+			if (cursor.value instanceof Uint8Array) {
+				console.log("[okra-idb] -", [hex(key), hex(cursor.value)])
+				yield [key, cursor.value]
+			} else {
+				throw new Error("Unexpected cursor value type")
+			}
 		}
 	}
 }

@@ -2,28 +2,22 @@ import type { ExecutionContext } from "ava"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 import Prando from "prando"
 
-import { MemoryStore } from "@canvas-js/okra-memory"
+import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
 import { Node, Tree, Builder, DEFAULT_METADATA } from "@canvas-js/okra"
-
-export function getStore(t: ExecutionContext): MemoryStore {
-	const store = new MemoryStore()
-	t.teardown(() => store.close())
-	return store
-}
 
 export async function initialize(
 	t: ExecutionContext,
 	entries: Iterable<[Uint8Array, Uint8Array]>,
 	metadata = DEFAULT_METADATA
 ): Promise<Tree> {
-	const store = getStore(t)
+	const store = new MemoryStore()
 	const builder = await Builder.open(store, metadata)
 	for (const [key, value] of entries) {
 		await builder.set(key, value)
 	}
 
 	await builder.finalize()
-	return await Tree.open(store, metadata)
+	return new MemoryTree(store, metadata)
 }
 
 export const defaultValue = Buffer.from([0xff, 0xff, 0xff, 0xff])

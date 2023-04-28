@@ -4,6 +4,32 @@ import { Delta, collect } from "@canvas-js/okra"
 
 import { getKey, defaultValue, random, initialize, iota } from "./utils.js"
 
+test("test sync empty source", async (t) => {
+	const [source, target] = await Promise.all([
+		initialize(t, iota(0), { K: 16, Q: 4 }),
+		initialize(t, iota(3), { K: 16, Q: 4 }),
+	])
+
+	t.deepEqual(await collect(target.delta(source)), [
+		{ key: Buffer.from("00000000", "hex"), source: null, target: Buffer.from("ffffffff", "hex") },
+		{ key: Buffer.from("00000001", "hex"), source: null, target: Buffer.from("ffffffff", "hex") },
+		{ key: Buffer.from("00000002", "hex"), source: null, target: Buffer.from("ffffffff", "hex") },
+	])
+})
+
+test("test sync empty target", async (t) => {
+	const [source, target] = await Promise.all([
+		initialize(t, iota(3), { K: 16, Q: 4 }),
+		initialize(t, [], { K: 16, Q: 4 }),
+	])
+
+	t.deepEqual(await collect(target.delta(source)), [
+		{ key: Buffer.from("00000000", "hex"), source: Buffer.from("ffffffff", "hex"), target: null },
+		{ key: Buffer.from("00000001", "hex"), source: Buffer.from("ffffffff", "hex"), target: null },
+		{ key: Buffer.from("00000002", "hex"), source: Buffer.from("ffffffff", "hex"), target: null },
+	])
+})
+
 async function testDelta(
 	t: ExecutionContext,
 	seed: string,

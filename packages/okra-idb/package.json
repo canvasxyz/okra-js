@@ -20,15 +20,16 @@
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"dependencies": {
-		"@canvas-js/okra": "0.0.0"
+		"@canvas-js/okra": "0.0.0",
+		"debug": "^4.3.4"
 	},
 	"devDependencies": {
 		"@ava/typescript": "^4.0.0",
 		"@types/node": "^18.15.11",
 		"ava": "^5.2.0",
 		"fake-indexeddb": "^4.0.1",
-		"typescript": "^5.0.3",
-		"idb": "^7.1.1"
+		"idb": "^7.1.1",
+		"typescript": "^5.0.3"
 	},
 	"peerDependencies": {
 		"idb": "^7.1.1"

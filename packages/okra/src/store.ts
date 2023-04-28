@@ -1,29 +1,13 @@
 import { blake3 } from "@noble/hashes/blake3"
 
-import type { Key, Node, NodeRange } from "./interface.js"
+import type { Key, Node, KeyValueStore, Entry, Metadata, Bound } from "./interface.js"
+import { OKRA_VERSION } from "./constants.js"
 
-export type Entry = [Uint8Array, Uint8Array]
-
-export interface Metadata {
-	readonly K: number
-	readonly Q: number
-}
-
-export interface KeyValueStore {
-	get(key: Uint8Array): Promise<Uint8Array | null>
-	set(key: Uint8Array, value: Uint8Array): Promise<void>
-	delete(key: Uint8Array): Promise<void>
-	entries(range?: KeyRange): AsyncIterableIterator<[Uint8Array, Uint8Array]>
-
-	close?(): Promise<void>
-}
-
-export interface KeyRange {
-	reverse?: boolean
-	lowerBound?: { key: Uint8Array; inclusive: boolean }
-	upperBound?: { key: Uint8Array; inclusive: boolean }
-}
-
+/**
+ * NodeStore is an internal class that Tree and Builder both extend.
+ * Its only purpose is to encapsulate the node-to-entry and
+ * entry-to-node conversion methods.
+ */
 export class NodeStore {
 	protected static metadataKey = new Uint8Array([0xff])
 	protected static anchorLeafKey = new Uint8Array([0])
@@ -31,6 +15,41 @@ export class NodeStore {
 	private readonly limit: number
 	constructor(readonly store: KeyValueStore, readonly metadata: Metadata) {
 		this.limit = Number((1n << 32n) / BigInt(metadata.Q))
+	}
+
+	protected async initialize() {
+		const metadata = await this.getMetadata()
+		if (metadata === null) {
+			await this.setMetadata(this.metadata)
+			await this.setNode({ level: 0, key: null, hash: this.getLeafAnchorHash() })
+		} else if (metadata.K !== this.metadata.K) {
+			throw new Error("metadata.K conflict")
+		} else if (metadata.Q !== this.metadata.Q) {
+			throw new Error("metadata.Q conflict")
+		}
+	}
+
+	protected async setMetadata(metadata: Metadata) {
+		const valueBuffer = new ArrayBuffer(10)
+		const valueView = new DataView(valueBuffer, 0, 10)
+		const value = new Uint8Array(valueBuffer, 0, 10)
+		new TextEncoder().encodeInto("okra", value)
+		value[4] = OKRA_VERSION
+		value[5] = metadata.K
+		valueView.setUint32(6, metadata.Q)
+		await this.store.set(NodeStore.metadataKey, value)
+	}
+
+	protected async getMetadata(): Promise<Metadata | null> {
+		const value = await this.store.get(NodeStore.metadataKey)
+		if (value === null) {
+			return null
+		} else if (value.length === 10) {
+			const view = new DataView(value.buffer, value.byteOffset, value.byteLength)
+			return { K: value[5], Q: view.getUint32(6) }
+		} else {
+			throw new Error("Invalid metadata entry")
+		}
 	}
 
 	public async getNode(level: number, key: Key): Promise<Node | null> {
@@ -65,22 +84,21 @@ export class NodeStore {
 		await this.store.delete(entryKey)
 	}
 
-	public async *iterate({ level, reverse, lowerBound, upperBound }: NodeRange): AsyncIterableIterator<Node> {
-		const keyRange: KeyRange = {
-			reverse: reverse ?? false,
+	public async *nodes(
+		level: number,
+		lowerBound: Bound<Key> | null = null,
+		upperBound: Bound<Key> | null = null,
+		{ reverse = false }: { reverse?: boolean } = {}
+	): AsyncIterableIterator<Node> {
+		const lowerKeyBound = lowerBound
+			? { key: NodeStore.createEntryKey(level, lowerBound.key), inclusive: lowerBound.inclusive }
+			: { key: NodeStore.createEntryKey(level, null), inclusive: true }
 
-			lowerBound:
-				lowerBound !== undefined
-					? { key: NodeStore.createEntryKey(level, lowerBound.key), inclusive: lowerBound.inclusive }
-					: { key: NodeStore.createEntryKey(level, null), inclusive: true },
+		const upperKeyBound = upperBound
+			? { key: NodeStore.createEntryKey(level, upperBound.key), inclusive: upperBound.inclusive }
+			: { key: NodeStore.createEntryKey(level + 1, null), inclusive: false }
 
-			upperBound:
-				upperBound !== undefined
-					? { key: NodeStore.createEntryKey(level, upperBound.key), inclusive: upperBound.inclusive }
-					: { key: NodeStore.createEntryKey(level + 1, null), inclusive: false },
-		}
-
-		for await (const entry of this.store.entries(keyRange)) {
+		for await (const entry of this.store.entries(lowerKeyBound, upperKeyBound, { reverse })) {
 			yield this.parseEntry(entry)
 		}
 	}

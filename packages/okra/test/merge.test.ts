@@ -2,7 +2,10 @@ import test, { ExecutionContext } from "ava"
 import Prando from "prando"
 
 import { Builder, Tree } from "@canvas-js/okra"
-import { getKey, compareEntries, getStore } from "./utils.js"
+import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
+
+import { getKey, compareEntries } from "./utils.js"
+import { text } from "node:stream/consumers"
 
 /**
  * testMerge creates identical trees A and B with the same entries:
@@ -11,7 +14,7 @@ import { getKey, compareEntries, getStore } from "./utils.js"
  * entries in B to different random 1-byte values.
  *
  * The merge() method iterates over the deltas and sets the target
- * entry to be [max(delta.source[0], delta.target[0])]. This is run
+ * entry to be [max(delta.source[0], delta.target[0])]. This is run both
  * ways, from A to B and then from B to A. At the end, the entries of
  * both databases are expected to be identical.
  */
@@ -25,7 +28,7 @@ async function testMerge(
 	const rng = new Prando(seed)
 
 	const metadata = { K: 16, Q: 4 }
-	const [storeA, storeB] = [getStore(t), getStore(t)]
+	const [storeA, storeB] = [new MemoryStore(), new MemoryStore()]
 	const [builderA, builderB] = await Promise.all([Builder.open(storeA, metadata), Builder.open(storeB, metadata)])
 
 	for (let i = 0; i < count; i++) {
@@ -35,7 +38,7 @@ async function testMerge(
 
 	await Promise.all([builderA.finalize(), builderB.finalize()])
 
-	const [a, b] = await Promise.all([Tree.open(storeA, metadata), Tree.open(storeB, metadata)])
+	const [a, b] = [new MemoryTree(storeA, metadata), new MemoryTree(storeB, metadata)]
 
 	for (let i = 0; i < deltaA; i++) {
 		const key = getKey(rng.nextInt(0, count - 1))
@@ -48,6 +51,10 @@ async function testMerge(
 		const value = new Uint8Array([rng.nextInt(0, 255)])
 		await a.set(key, value)
 	}
+	// console.log("TREE A ------------")
+	// console.log(await text(a.print()))
+	// console.log("TREE B ------------")
+	// console.log(await text(a.print()))
 
 	await a.merge(b, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))
 	await b.merge(a, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))

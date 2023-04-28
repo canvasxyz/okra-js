@@ -2,18 +2,20 @@ import test, { ExecutionContext } from "ava"
 
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { Builder, Tree } from "@canvas-js/okra"
+import { Builder, Metadata, Tree } from "@canvas-js/okra"
 
-import { compareEntries, getStore, iota, shuffle } from "./utils.js"
+import { compareEntries, iota, shuffle } from "./utils.js"
+import { MemoryTree, MemoryStore } from "@canvas-js/okra-memory"
 
+const metadata: Metadata = { K: 16, Q: 4 }
 test("open tree", async (t) => {
-	const tree = await Tree.open(getStore(t))
+	const tree = await MemoryTree.open(metadata)
 	const root = await tree.getRoot()
 	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from("af1349b9f5f9a1a6a0404dea36dcc949", "hex") })
 })
 
 test("get/set/delete", async (t) => {
-	const tree = await Tree.open(getStore(t))
+	const tree = await MemoryTree.open(metadata)
 	await tree.set(Buffer.from("a"), Buffer.from("foo"))
 	await tree.set(Buffer.from("a"), Buffer.from("bar"))
 	t.deepEqual(await tree.get(Buffer.from("a")), Buffer.from("bar"))
@@ -26,17 +28,10 @@ test("get/set/delete", async (t) => {
 const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
 	t.timeout(60 * 1000)
 
-	const store = getStore(t)
-	const tree = await Tree.open(store, { K: 16, Q: 4 })
+	const tree = await MemoryTree.open(metadata)
 	for (const [key, value] of iota(count)) {
 		await tree.set(key, value)
 	}
-
-	// console.log(await text(tree.print()))
-
-	// for await (const [key, value] of store.db.iterator()) {
-	// 	t.log(hex(key), hex(value))
-	// }
 
 	const root = await tree.getRoot()
 	t.is(root.level, rootLevel)
@@ -51,7 +46,8 @@ const testShuffleIota =
 	(count: number, rootLevel: number, rootHashPrefix: string, iters: number) => async (t: ExecutionContext) => {
 		t.timeout(Math.max(5 * 60 * 1000, iters * count))
 
-		const builder = await Builder.open(getStore(t), { K: 16, Q: 4 })
+		const store = new MemoryStore()
+		const builder = await Builder.open(store, { K: 16, Q: 4 })
 
 		const entries: [Uint8Array, Uint8Array][] = []
 		for (const [key, value] of iota(count)) {
@@ -67,19 +63,16 @@ const testShuffleIota =
 			t.log(`iteration ${i + 1}/${iters}`)
 
 			shuffle(entries)
-			const store = getStore(t)
-			const tree = await Tree.open(store, { K: 16, Q: 4 })
-			try {
-				for (const [key, value] of entries) {
-					await tree.set(key, value)
-				}
 
-				t.deepEqual(await tree.getRoot(), root)
-				const delta = await compareEntries(t, store.db.iterator(), store.db.iterator())
-				t.is(delta, 0)
-			} finally {
-				await store.close()
+			const tree = await MemoryTree.open({ K: 16, Q: 4 })
+
+			for (const [key, value] of entries) {
+				await tree.set(key, value)
 			}
+
+			t.deepEqual(await tree.getRoot(), root)
+			const delta = await compareEntries(t, tree.store.db.iterator(), store.db.iterator())
+			t.is(delta, 0)
 		}
 	}
 

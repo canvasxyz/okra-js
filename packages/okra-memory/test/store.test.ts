@@ -1,16 +1,9 @@
-import test, { ExecutionContext } from "ava"
+import test from "ava"
 
-import { MemoryStore } from "@canvas-js/okra-memory"
-import { Tree } from "@canvas-js/okra"
-
-function getStore(t: ExecutionContext) {
-	const store = new MemoryStore()
-	t.teardown(() => store.close())
-	return store
-}
+import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
 
 test("get/set/delete", async (t) => {
-	const store = getStore(t)
+	const store = new MemoryStore()
 
 	await store.set(Buffer.from("a"), Buffer.from("foo"))
 	await store.set(Buffer.from("b"), Buffer.from("bar"))
@@ -22,8 +15,7 @@ test("get/set/delete", async (t) => {
 })
 
 test("open tree", async (t) => {
-	const store = getStore(t)
-	const tree = await Tree.open(store)
+	const tree = await MemoryTree.open()
 	const root = await tree.getRoot()
 	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from("af1349b9f5f9a1a6a0404dea36dcc949", "hex") })
 })

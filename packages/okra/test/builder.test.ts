@@ -3,10 +3,11 @@ import test, { ExecutionContext } from "ava"
 import { Builder } from "@canvas-js/okra"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import { getStore, iota } from "./utils.js"
+import { iota } from "./utils.js"
+import { MemoryStore } from "@canvas-js/okra-memory"
 
 const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
-	const builder = await Builder.open(getStore(t), { K: 16, Q: 4 })
+	const builder = await Builder.open(new MemoryStore(), { K: 16, Q: 4 })
 	for (const [key, value] of iota(count)) {
 		await builder.set(key, value)
 	}

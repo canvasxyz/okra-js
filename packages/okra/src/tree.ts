@@ -1,77 +1,50 @@
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import type { Delta, Key, Node, Source, NodeRange } from "./interface.js"
-import { KeyValueStore, NodeStore, Metadata, KeyRange } from "./store.js"
+import type { Metadata, Key, Node, Source, KeyValueStore, Delta, Target, Bound } from "./interface.js"
+
+import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
 import { Driver } from "./driver.js"
-import { assert, equalKeys, lessThan } from "./utils.js"
 import { debug, formatNode } from "./format.js"
 import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
+import { assert, equalKeys, lessThan } from "./utils.js"
 
 type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
 
 // we have enums at home
 const Result = { Update: 0, Delete: 1 } as const
-type Result = typeof Result[keyof typeof Result]
+type Result = (typeof Result)[keyof typeof Result]
 
-export interface TreeOptions {
-	K?: number
-	Q?: number
-	log?: (format: string, ...args: any[]) => void
-}
-
-export class Tree extends NodeStore implements Source {
+export class Tree extends NodeStore implements Target, KeyValueStore {
 	private static leafEntryLowerBound = { key: NodeStore.createEntryKey(0, null), inclusive: false }
 	private static leafEntryUpperBound = { key: NodeStore.createEntryKey(1, null), inclusive: false }
 
 	private static indent = "  "
 
-	public static async open(store: KeyValueStore, options: TreeOptions = {}): Promise<Tree> {
-		const K = options.K ?? DEFAULT_K
-		const Q = options.Q ?? DEFAULT_Q
-		const tree = new Tree(store, { K, Q }, options.log ?? debug("okra:tree"))
-		await tree.setNode({ level: 0, key: null, hash: tree.getLeafAnchorHash() })
-		return tree
-	}
-
 	private depth = 0
 	private newSiblings: Key[] = []
+	private readonly format = debug("okra:tree")
 
-	private constructor(
-		public readonly store: KeyValueStore,
-		public readonly metadata: Metadata,
-		private readonly format: (format: string, ...args: any[]) => void
-	) {
+	protected constructor(public readonly store: KeyValueStore, options: Partial<Metadata> = {}) {
+		const metadata = { K: options.K ?? DEFAULT_K, Q: options.Q ?? DEFAULT_Q }
 		super(store, metadata)
 	}
 
-	public async close() {
-		if (this.store.close !== undefined) {
-			await this.store.close()
-		}
-	}
+	public async *entries(
+		lowerBound: Bound<Uint8Array> | null = null,
+		upperBound: Bound<Uint8Array> | null = null,
+		{ reverse = false }: { reverse?: boolean } = {}
+	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
+		const lowerKeyBound = lowerBound
+			? { key: NodeStore.createEntryKey(0, lowerBound.key), inclusive: lowerBound.inclusive }
+			: Tree.leafEntryLowerBound
 
-	public async *entries({ reverse, lowerBound, upperBound }: KeyRange = {}): AsyncIterableIterator<
-		[Uint8Array, Uint8Array]
-	> {
-		const range: KeyRange = { reverse: reverse ?? false }
+		const upperKeyBound = upperBound
+			? { key: NodeStore.createEntryKey(0, upperBound.key), inclusive: upperBound.inclusive }
+			: Tree.leafEntryUpperBound
 
-		if (lowerBound !== undefined) {
-			const { key, inclusive } = lowerBound
-			range.lowerBound = { key: NodeStore.createEntryKey(0, key), inclusive }
-		} else {
-			range.lowerBound = Tree.leafEntryLowerBound
-		}
-
-		if (upperBound !== undefined) {
-			const { key, inclusive } = upperBound
-			range.upperBound = { key: NodeStore.createEntryKey(0, key), inclusive }
-		} else {
-			range.upperBound = Tree.leafEntryUpperBound
-		}
-
-		for await (const entry of this.store.entries(range)) {
+		for await (const entry of this.store.entries(lowerKeyBound, upperKeyBound, { reverse })) {
 			const node = this.parseEntry(entry)
 			if (node.key === null || node.value === undefined) {
 				throw new Error("Internal error - unexpected leaf entry")
@@ -254,7 +227,7 @@ export class Tree extends NodeStore implements Source {
 
 	private async findTarget(level: number, firstChild: Key, key: Uint8Array): Promise<Key> {
 		let target: Node | null = null
-		for await (const node of this.iterate({ level, lowerBound: { key: firstChild, inclusive: true } })) {
+		for await (const node of this.nodes(level, { key: firstChild, inclusive: true })) {
 			if (lessThan(key, node.key)) {
 				break
 			} else {
@@ -274,14 +247,9 @@ export class Tree extends NodeStore implements Source {
 
 		await this.deleteNode(level, target)
 
-		const range: NodeRange = {
-			level,
-			reverse: true,
-			lowerBound: { key: null, inclusive: true },
-			upperBound: { key: target, inclusive: false },
-		}
-
-		for await (const previousChild of this.iterate(range)) {
+		const lowerBound = { key: null, inclusive: true }
+		const upperBound = { key: target, inclusive: false }
+		for await (const previousChild of this.nodes(level, lowerBound, upperBound, { reverse: true })) {
 			this.log("previousChild: %n", previousChild)
 			if (previousChild.key === null) {
 				return null
@@ -305,7 +273,7 @@ export class Tree extends NodeStore implements Source {
 		this.log("hashing %d %k", level, key)
 
 		const hash = blake3.create({ dkLen: this.metadata.K })
-		for await (const node of this.iterate({ level: level - 1, lowerBound: { key, inclusive: true } })) {
+		for await (const node of this.nodes(level - 1, { key, inclusive: true })) {
 			if (this.isSplit(node.hash) && !equalKeys(node.key, key)) {
 				break
 			}
@@ -321,7 +289,7 @@ export class Tree extends NodeStore implements Source {
 	}
 
 	private async getLastNode(level: number): Promise<Node> {
-		for await (const node of this.iterate({ level, reverse: true })) {
+		for await (const node of this.nodes(level, null, null, { reverse: true })) {
 			assert(node.level === level)
 			return node
 		}
@@ -337,7 +305,8 @@ export class Tree extends NodeStore implements Source {
 	 * Get the root node of the merkle tree. Returns the leaf anchor node if the tree is empty.
 	 */
 	public async getRoot(): Promise<Node> {
-		for await (const entry of this.store.entries({ reverse: true })) {
+		const upperBound = { key: NodeStore.metadataKey, inclusive: false }
+		for await (const entry of this.store.entries(null, upperBound, { reverse: true })) {
 			const node = this.parseEntry(entry)
 			assert(node.key === null, "Internal error: unexpected root node key")
 			return node
@@ -355,7 +324,7 @@ export class Tree extends NodeStore implements Source {
 		}
 
 		const children: Node[] = []
-		for await (const node of this.iterate({ level: level - 1, lowerBound: { key, inclusive: true } })) {
+		for await (const node of this.nodes(level - 1, { key, inclusive: true })) {
 			if (this.isSplit(node.hash) && !equalKeys(node.key, key)) {
 				break
 			} else {
@@ -371,7 +340,7 @@ export class Tree extends NodeStore implements Source {
 	 */
 	public async *delta(source: Source): AsyncGenerator<Delta, void, undefined> {
 		const driver = new Driver(source, this)
-		yield* driver.delta()
+		yield* driver.sync()
 	}
 
 	public async copy(source: Source): Promise<void> {
@@ -398,7 +367,7 @@ export class Tree extends NodeStore implements Source {
 
 	public async merge(
 		source: Source,
-		arbiter: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+		merge: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
 	): Promise<void> {
 		for await (const delta of this.delta(source)) {
 			if (delta.source === null) {
@@ -406,7 +375,7 @@ export class Tree extends NodeStore implements Source {
 			} else if (delta.target === null) {
 				await this.set(delta.key, delta.source)
 			} else {
-				const value = await arbiter(delta.key, delta.source, delta.target)
+				const value = await merge(delta.key, delta.source, delta.target)
 				await this.set(delta.key, value)
 			}
 		}
@@ -417,11 +386,8 @@ export class Tree extends NodeStore implements Source {
 	 * @returns the new root node
 	 */
 	public async rebuild(): Promise<Node> {
-		const range: KeyRange = {
-			lowerBound: { key: NodeStore.createEntryKey(1, null), inclusive: true },
-		}
-
-		for await (const [entryKey] of this.store.entries(range)) {
+		const lowerBound = { key: NodeStore.createEntryKey(1, null), inclusive: true }
+		for await (const [entryKey] of this.store.entries(lowerBound)) {
 			await this.store.delete(entryKey)
 		}
 
@@ -452,9 +418,6 @@ export class Tree extends NodeStore implements Source {
 				}
 			} else {
 				const children = await tree.getChildren(node.level, node.key)
-				if (node.level === 3) {
-					console.log("got children", formatNode(node), children.map(formatNode))
-				}
 				for (const [i, child] of children.entries()) {
 					if (i > 0) {
 						yield encoder.encode(prefix)

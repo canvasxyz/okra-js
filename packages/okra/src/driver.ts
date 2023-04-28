@@ -1,24 +1,42 @@
-import { Node, Key, Source, Delta, NodeRange } from "./interface.js"
-import { Tree } from "./tree.js"
+import { Node, Key, Source, Target, Delta, Bound } from "./interface.js"
+
 import { debug } from "./format.js"
 import { assert, equalArrays, equalKeys, equalNodes, lessThan } from "./utils.js"
 
 const next = (iter: AsyncIterableIterator<Node>) => iter.next().then(({ done, value }) => (done ? null : value))
 
+function getLimit(nodes: Node[], index: number, limit: Uint8Array | null) {
+	if (index === nodes.length - 1) {
+		return limit
+	} else {
+		const node = nodes[index + 1]
+		assert(node.key !== null, "next node key was not null")
+		return node.key
+	}
+}
+
 export class Driver {
-	private static indent = "| "
+	private static indent = "│ "
 
 	private depth = 0
 	private formatter = debug("okra:sync")
-	private leafCursor: Key = null
 
-	constructor(readonly source: Source, readonly target: Tree) {}
+	/**
+	 * Syncing progresses from left to right, starting at the `null` anchor key.
+	 * `targetLowerBound` is a pointer in the target tree range that is advanced in two ways:
+	 * 1. identifying and skipping a common subtree, which sets targetLowerBound to an
+	 *    inclusive bound at the first target key after the end of the subtree range.
+	 * 2.
+	 */
+	private targetLowerBound: Bound<Key> | null = { key: null, inclusive: false }
+
+	constructor(readonly source: Source, readonly target: Target) {}
 
 	private log(format: string, ...args: any[]) {
 		this.formatter("%s" + format, Driver.indent.repeat(this.depth), ...args)
 	}
 
-	public async *delta(): AsyncGenerator<Delta, void, undefined> {
+	public async *sync(): AsyncGenerator<Delta, void, undefined> {
 		const sourceRoot = await this.source.getRoot()
 		const targetRoot = await this.target.getRoot()
 
@@ -26,29 +44,31 @@ export class Driver {
 		this.depth += 1
 		this.log("source root: %n", sourceRoot)
 		this.log("target root: %n", targetRoot)
-		if (sourceRoot.level === 0) {
-			this.log("skipping sync because source is emtpy")
-			return
-		} else if (equalNodes(sourceRoot, targetRoot)) {
+		if (equalNodes(sourceRoot, targetRoot)) {
 			this.log("source and target roots are equal")
 			return
+		} else if (sourceRoot.level === 0) {
+			this.log("skipping sync because source is emtpy")
+			for await (const { key, value } of this.target.nodes(0, { key: null, inclusive: false })) {
+				assert(key !== null && value !== undefined, "invalid leaf node")
+				yield { key, source: null, target: value }
+			}
 		} else {
-			yield* this.deltaRoot(targetRoot, sourceRoot, null)
-			if (this.leafCursor !== null) {
-				const range: NodeRange = {
-					level: 0,
-					lowerBound: { key: this.leafCursor, inclusive: true },
-				}
-
-				for await (const targetLeaf of this.target.iterate(range)) {
-					assert(targetLeaf.key !== null && targetLeaf.value !== undefined)
-					yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
+			yield* this.syncRoots(targetRoot, sourceRoot, null)
+			if (this.targetLowerBound !== null) {
+				for await (const { key, value } of this.target.nodes(0, this.targetLowerBound)) {
+					assert(key !== null && value !== undefined, "invalid leaf node")
+					yield { key, source: null, target: value }
 				}
 			}
 		}
 	}
 
-	async *deltaRoot(targetRoot: Node, sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
+	async *syncRoots(
+		targetRoot: Node,
+		sourceNode: Node,
+		sourceLimit: Uint8Array | null
+	): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncRoot")
 		this.depth += 1
 
@@ -69,19 +89,19 @@ export class Driver {
 					}
 				} else {
 					for (const [i, sourceChild] of sourceChildren.entries()) {
-						const sourceChildLimit = i === sourceChildren.length - 1 ? sourceLimit : sourceChildren[i + 1].key
-						yield* this.deltaRoot(targetRoot, sourceChild, sourceChildLimit)
+						const sourceChildLimit = getLimit(sourceChildren, i, sourceLimit)
+						yield* this.syncRoots(targetRoot, sourceChild, sourceChildLimit)
 					}
 				}
 			} else {
-				yield* this.deltaNode(sourceNode, sourceLimit)
+				yield* this.syncNodes(sourceNode, sourceLimit)
 			}
 		} finally {
 			this.depth -= 1
 		}
 	}
 
-	async *deltaNode(sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
+	async *syncNodes(sourceNode: Node, sourceLimit: Uint8Array | null): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncNode")
 		this.depth += 1
 
@@ -95,79 +115,60 @@ export class Driver {
 			}
 
 			// yield the missing entries
-			if (lessThan(this.leafCursor, sourceNode.key)) {
-				this.log("target leaf cursor %k is behind source node key", this.leafCursor)
+			if (this.targetLowerBound !== null && lessThan(this.targetLowerBound.key, sourceNode.key)) {
+				this.log("target bound %k is behind source node key", this.targetLowerBound.key)
 				this.log("yielding missing entries...")
 
-				const range: NodeRange = {
-					level: 0,
-					lowerBound: { key: this.leafCursor, inclusive: true },
-					upperBound: { key: sourceNode.key, inclusive: false },
-				}
-
-				for await (const targetLeaf of this.target.iterate(range)) {
-					if (targetLeaf.key === null) {
-						continue
-					}
-
-					assert(targetLeaf.level == 0 && targetLeaf.value !== undefined)
+				// const lowerBound = { key: this.leafCursor.key, inclusive: true }
+				const upperBound = { key: sourceNode.key, inclusive: false }
+				for await (const targetLeaf of this.target.nodes(0, this.targetLowerBound, upperBound)) {
+					assert(targetLeaf.key !== null && targetLeaf.value !== undefined, "invalid leaf node")
 					yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
 				}
 
-				this.leafCursor = sourceNode.key
-				this.log("set leaf cursor to %k", this.leafCursor)
+				this.targetLowerBound = { key: sourceNode.key, inclusive: true }
+				this.log("set target bound to { key: %k, inclusive: true }", this.targetLowerBound.key)
 			}
 
 			if (targetNode !== null && equalNodes(sourceNode, targetNode)) {
 				this.log("skipping subtree")
 
-				const range: NodeRange = {
-					level: targetNode.level,
-					lowerBound: { key: targetNode.key, inclusive: false },
-				}
-
-				for await (const nextTargetNode of this.target.iterate(range)) {
-					this.leafCursor = nextTargetNode.key
-					this.log("set leaf cursor to %k", this.leafCursor)
+				const lowerBound = { key: targetNode.key, inclusive: false }
+				for await (const { key } of this.target.nodes(targetNode.level, lowerBound)) {
+					this.targetLowerBound = { key, inclusive: true }
+					this.log("set target bound to { key: %k, inclusive: true }", key)
 					return
 				}
 
-				this.leafCursor = null
-				this.log("set leaf cursor to %k", this.leafCursor)
+				this.targetLowerBound = null
+				this.log("set target bound to null")
 				return
 			}
 
 			if (sourceNode.level > 1) {
 				const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
 				for (const [i, sourceChild] of sourceChildren.entries()) {
-					const sourceChildLimit = i === sourceChildren.length - 1 ? sourceLimit : sourceChildren[i + 1].key
-					yield* this.deltaNode(sourceChild, sourceChildLimit)
+					const sourceChildLimit = getLimit(sourceChildren, i, sourceLimit)
+					yield* this.syncNodes(sourceChild, sourceChildLimit)
 				}
 			} else {
-				yield* this.deltaLeaf(sourceNode, sourceLimit)
+				yield* this.syncLeaves(sourceNode, sourceLimit)
 			}
 		} finally {
 			this.depth -= 1
 		}
 	}
 
-	private async *deltaLeaf(sourceNode: Node, sourceLimit: Key): AsyncGenerator<Delta, void, undefined> {
+	private async *syncLeaves(sourceNode: Node, sourceLimit: Uint8Array | null): AsyncGenerator<Delta, void, undefined> {
 		assert(sourceNode.level === 1)
 
 		const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
 
 		this.log("yielding missing entries via explicit leaf iteration")
 
-		const range: NodeRange = {
-			level: 0,
-			lowerBound: { key: sourceNode.key, inclusive: true },
-		}
-
-		if (sourceLimit !== null) {
-			range.upperBound = { key: sourceLimit, inclusive: false }
-		}
-
-		const targetNodes = this.target.iterate(range)
+		const lowerBound = { key: sourceNode.key, inclusive: true }
+		const upperBound = sourceLimit ? { key: sourceLimit, inclusive: false } : null
+		const targetNodes = this.target.nodes(0, lowerBound, upperBound)
 
 		try {
 			let targetLeaf = await next(targetNodes)
@@ -218,12 +219,20 @@ export class Driver {
 			}
 
 			this.log("done yielding leaves")
-			this.leafCursor = targetLeaf === null ? sourceLimit : targetLeaf.key
-			this.log("set leaf cursor to", this.leafCursor)
-		} finally {
-			if (targetNodes.return) {
-				await targetNodes.return()
+			if (targetLeaf === null) {
+				if (sourceLimit) {
+					this.targetLowerBound = { key: sourceLimit, inclusive: true }
+					this.log("set target bound to { key: %k, inclusive: true }", sourceLimit)
+				} else {
+					this.targetLowerBound = null
+					this.log("set target bound to null", sourceLimit)
+				}
+			} else {
+				this.targetLowerBound = { key: targetLeaf.key, inclusive: targetLeaf.key !== null }
+				this.log("set target bound to { key: %k, inclusive: true }", targetLeaf.key)
 			}
+		} finally {
+			await targetNodes.return?.()
 		}
 	}
 }
