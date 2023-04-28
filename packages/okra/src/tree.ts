@@ -6,7 +6,7 @@ import type { Metadata, Key, Node, Source, KeyValueStore, Delta, Target, Bound }
 import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
 import { Driver } from "./driver.js"
-import { debug, formatNode } from "./format.js"
+import { debug } from "./format.js"
 import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
 import { assert, equalKeys, lessThan } from "./utils.js"
 

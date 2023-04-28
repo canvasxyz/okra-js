@@ -3,8 +3,16 @@ import { Node, Key, Source, Target, Delta, Bound } from "./interface.js"
 import { debug } from "./format.js"
 import { assert, equalArrays, equalKeys, equalNodes, isInRange, lessThan } from "./utils.js"
 
-const next = (iter: AsyncIterableIterator<Node>) => iter.next().then(({ done, value }) => (done ? null : value))
+/**
+ * Unwrap an `IteratorResult<T>` into `T | null`
+ */
+const next = <T>(iter: AsyncIterator<T, void, undefined>) =>
+	iter.next().then(({ done, value }) => (done ? null : value))
 
+/**
+ * Return an exclusive upper bound for the next node in `nodes` after `index`,
+ * or the given `upperBound` if `nodes[index]` is the last element.
+ */
 function getUpperBound(nodes: Node[], index: number, upperBound: Bound<Uint8Array> | null): Bound<Uint8Array> | null {
 	if (index === nodes.length - 1) {
 		return upperBound
@@ -29,7 +37,7 @@ export class Driver {
 	 *    inclusive bound at the first target key after the end of the subtree range.
 	 * 2.
 	 */
-	private cursor: Bound<Key> | null = { key: null, inclusive: false }
+	private cursor: Bound<Key> | null = null
 
 	constructor(readonly source: Source, readonly target: Target) {}
 
@@ -49,18 +57,20 @@ export class Driver {
 			return
 		}
 
+		this.cursor = { key: null, inclusive: false }
 		if (sourceRoot.level > 0) {
 			yield* this.syncRoots(targetRoot, sourceRoot, null)
 		}
 
-		if (this.cursor !== null) {
-			for await (const { key, value } of this.target.nodes(0, this.cursor)) {
-				assert(key !== null && value !== undefined, "invalid leaf node")
-				yield { key, source: null, target: value }
-			}
-		}
+		yield* this.range(null)
 	}
 
+	/**
+	 * The purpose of `syncRoots` is to align the entrypoints of the two trees.
+	 * If the target tree's root level is less than the source tree's root level,
+	 * we treat all of the nodes the source tree at the target root level as separete
+	 * roots and sync them all individually.
+	 */
 	async *syncRoots(
 		targetRoot: Node,
 		sourceNode: Node,
@@ -83,12 +93,12 @@ export class Driver {
 						}
 
 						assert(sourceValue !== undefined, "invalid leaf node")
-						this.log("YIELDING %k: source = %h, target = null", key, sourceValue)
 						yield { key, source: sourceValue, target: null }
 					}
 				} else {
 					for (const [i, sourceChild] of sourceChildren.entries()) {
-						yield* this.syncRoots(targetRoot, sourceChild, getUpperBound(sourceChildren, i, sourceUpperBound))
+						const sourceChildUpperBound = getUpperBound(sourceChildren, i, sourceUpperBound)
+						yield* this.syncRoots(targetRoot, sourceChild, sourceChildUpperBound)
 					}
 				}
 			} else {
@@ -111,21 +121,6 @@ export class Driver {
 			this.log("source node: %n", sourceNode)
 			this.log("target node: %n", targetNode)
 
-			// yield the missing entries
-			if (!isInRange(sourceNode.key, null, this.cursor)) {
-				this.log("source node key is outside the cursor range")
-				this.log("yielding missing entries...")
-
-				const upperBound = { key: sourceNode.key, inclusive: false }
-				for await (const { key, value: targetValue } of this.target.nodes(0, this.cursor, upperBound)) {
-					assert(key !== null && targetValue !== undefined, "invalid leaf node")
-					yield { key, source: null, target: targetValue }
-				}
-
-				this.cursor = { key: sourceNode.key, inclusive: true }
-				this.log("moved cursor to %b", this.cursor)
-			}
-
 			if (targetNode !== null && equalNodes(sourceNode, targetNode)) {
 				this.log("skipping subtree")
 
@@ -144,12 +139,14 @@ export class Driver {
 			if (sourceNode.level > 1) {
 				const sourceChildren = await this.source.getChildren(sourceNode.level, sourceNode.key)
 				for (const [i, sourceChild] of sourceChildren.entries()) {
-					yield* this.syncNodes(sourceChild, getUpperBound(sourceChildren, i, sourceUpperBound))
+					const sourceChildUpperBound = getUpperBound(sourceChildren, i, sourceUpperBound)
+					yield* this.syncNodes(sourceChild, sourceChildUpperBound)
 				}
 			} else {
 				yield* this.syncLeaves(sourceNode, sourceUpperBound)
 			}
 		} finally {
+			yield* this.range(sourceUpperBound)
 			this.depth -= 1
 		}
 	}
@@ -184,7 +181,7 @@ export class Driver {
 				while (targetLeaf !== null && lessThan(targetLeaf.key, sourceLeaf.key)) {
 					if (targetLeaf.key !== null) {
 						assert(targetLeaf.value !== undefined)
-						this.log("YIELDING %k: source = null, target = %h", targetLeaf.key, targetLeaf.value)
+						// assert(targetLeaf.key !== null && targetLeaf.value !== undefined)
 						yield { key: targetLeaf.key, source: null, target: targetLeaf.value }
 					}
 
@@ -193,13 +190,11 @@ export class Driver {
 				}
 
 				if (targetLeaf === null || lessThan(sourceLeaf.key, targetLeaf.key)) {
-					this.log("YIELDING %k: source = %h, target = null", sourceLeaf.key, sourceLeaf.value)
 					yield { key: sourceLeaf.key, source: sourceLeaf.value, target: null }
 				} else {
 					assert(equalKeys(sourceLeaf.key, targetLeaf.key))
 					if (!equalArrays(sourceLeaf.hash, targetLeaf.hash)) {
 						assert(targetLeaf.value !== undefined)
-						this.log("YIELDING %k: source = %h, target = %h", sourceLeaf.key, sourceLeaf.value, targetLeaf.value)
 						yield { key: sourceLeaf.key, source: sourceLeaf.value, target: targetLeaf.value }
 					}
 
@@ -211,7 +206,21 @@ export class Driver {
 			this.cursor = targetLeaf ? { key: targetLeaf.key, inclusive: targetLeaf.key !== null } : sourceUpperBound
 			this.log("moved cursor to %b", this.cursor)
 		} finally {
+			// the node iterator might have cleanup work to do
 			await targetNodes.return?.()
 		}
+	}
+
+	private async *range(sourceUpperBound: Bound<Uint8Array> | null): AsyncGenerator<Delta, void, undefined> {
+		if (this.cursor === null) {
+			return
+		}
+
+		for await (const { key, value: targetValue } of this.target.nodes(0, this.cursor, sourceUpperBound)) {
+			assert(key !== null && targetValue !== undefined, "invalid leaf node")
+			yield { key, source: null, target: targetValue }
+		}
+
+		this.cursor = sourceUpperBound
 	}
 }
