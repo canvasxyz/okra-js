@@ -1,4 +1,4 @@
-import type { Key, Node } from "./interface.js"
+import type { Bound, Key, Node } from "./interface.js"
 
 export function assert(condition: unknown, message?: string): asserts condition {
 	if (!condition) {
@@ -23,6 +23,30 @@ export function lessThan(a: Key, b: Key): boolean {
 	}
 
 	return x < y
+}
+
+export function isInRange(
+	key: Key,
+	lowerBound: Bound<Key> | null = null,
+	upperBound: Bound<Key> | null = null
+): boolean {
+	if (lowerBound !== null) {
+		if (lessThan(key, lowerBound.key)) {
+			return false
+		} else if (!lowerBound.inclusive && equalKeys(key, lowerBound.key)) {
+			return false
+		}
+	}
+
+	if (upperBound !== null) {
+		if (lessThan(upperBound.key, key)) {
+			return false
+		} else if (!upperBound.inclusive && equalKeys(key, upperBound.key)) {
+			return false
+		}
+	}
+
+	return true
 }
 
 export const equalArrays = (a: Uint8Array, b: Uint8Array) =>
