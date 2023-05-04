@@ -10,7 +10,7 @@ A p2p merkle index in pure JavaScript.
   - [Opening a tree](#opening-a-tree)
   - [Getting, setting, and deleting entries](#getting-setting-and-deleting-entries)
   - [Iterating over ranges of entries](#iterating-over-ranges-of-entries)
-  - [Exposing the internal merkle search tree](#exposing-the-internal-merkle-search-tree)
+  - [Exposing the internal merkle tree nodes](#exposing-the-internal-merkle-tree-nodes)
   - [Syncing with a remote source](#syncing-with-a-remote-source)
   - [Common syncing patterns](#common-syncing-patterns)
   - [Debugging](#debugging)
@@ -158,7 +158,7 @@ await collect(
 // ]
 ```
 
-### Iterating over internal merkle tree nodes
+### Exposing the internal merkle tree nodes
 
 You can access the internal merkle tree nodes using the `getRoot`, `getNode`, and `getChildren` methods. These are the methods that must be accessible to other Okra databases, such as over a WebSocket connection. okra-js itself is transport-agnostic.
 
