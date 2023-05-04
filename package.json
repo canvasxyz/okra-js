@@ -1,6 +1,6 @@
 {
 	"private": true,
-	"description": "A psueorandom merkle search tree in pure JavaScript",
+	"description": "A p2p merkle index in pure JavaScript",
 	"version": "0.0.0",
 	"type": "module",
 	"workspaces": [

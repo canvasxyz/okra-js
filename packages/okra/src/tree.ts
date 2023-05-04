@@ -1,11 +1,10 @@
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import type { Metadata, Key, Node, Source, KeyValueStore, Delta, Target, Bound } from "./interface.js"
+import type { Metadata, Key, Node, KeyValueStore, Target, Bound } from "./interface.js"
 
 import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
-import { Driver } from "./driver.js"
 import { debug } from "./format.js"
 import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
 import { assert, equalKeys, lessThan } from "./utils.js"
@@ -308,7 +307,7 @@ export class Tree extends NodeStore implements Target, KeyValueStore {
 		const upperBound = { key: NodeStore.metadataKey, inclusive: false }
 		for await (const entry of this.store.entries(null, upperBound, { reverse: true })) {
 			const node = this.parseEntry(entry)
-			assert(node.key === null, "Internal error: unexpected root node key")
+			assert(node.key === null, "Internal error: unexpected root node key", node)
 			return node
 		}
 
@@ -333,52 +332,6 @@ export class Tree extends NodeStore implements Target, KeyValueStore {
 		}
 
 		return children
-	}
-
-	/**
-	 * Iterate over the differences between the entries in the local tree and a remote source.
-	 */
-	public async *delta(source: Source): AsyncGenerator<Delta, void, undefined> {
-		const driver = new Driver(source, this)
-		yield* driver.sync()
-	}
-
-	public async copy(source: Source): Promise<void> {
-		for await (const delta of this.delta(source)) {
-			if (delta.source === null) {
-				await this.delete(delta.key)
-			} else {
-				await this.set(delta.key, delta.source)
-			}
-		}
-	}
-
-	public async pull(source: Source): Promise<void> {
-		for await (const delta of this.delta(source)) {
-			if (delta.source === null) {
-				continue
-			} else if (delta.target === null) {
-				await this.set(delta.key, delta.source)
-			} else {
-				throw new Error(`Conflict at key ${hex(delta.key)}`)
-			}
-		}
-	}
-
-	public async merge(
-		source: Source,
-		merge: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
-	): Promise<void> {
-		for await (const delta of this.delta(source)) {
-			if (delta.source === null) {
-				continue
-			} else if (delta.target === null) {
-				await this.set(delta.key, delta.source)
-			} else {
-				const value = await merge(delta.key, delta.source, delta.target)
-				await this.set(delta.key, value)
-			}
-		}
 	}
 
 	/**

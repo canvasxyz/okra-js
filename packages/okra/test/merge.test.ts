@@ -1,11 +1,10 @@
 import test, { ExecutionContext } from "ava"
 import Prando from "prando"
 
-import { Builder, Tree } from "@canvas-js/okra"
+import { Builder, Source, Tree, sync } from "@canvas-js/okra"
 import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
 
 import { getKey, compareEntries } from "./utils.js"
-import { text } from "node:stream/consumers"
 
 /**
  * testMerge creates identical trees A and B with the same entries:
@@ -18,6 +17,24 @@ import { text } from "node:stream/consumers"
  * ways, from A to B and then from B to A. At the end, the entries of
  * both databases are expected to be identical.
  */
+
+async function merge(
+	source: Source,
+	target: Tree,
+	merge: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+): Promise<void> {
+	for await (const delta of sync(source, target)) {
+		if (delta.source === null) {
+			continue
+		} else if (delta.target === null) {
+			await target.set(delta.key, delta.source)
+		} else {
+			const value = await merge(delta.key, delta.source, delta.target)
+			await target.set(delta.key, value)
+		}
+	}
+}
+
 async function testMerge(
 	t: ExecutionContext,
 	seed: string,
@@ -56,8 +73,8 @@ async function testMerge(
 	// console.log("TREE B ------------")
 	// console.log(await text(a.print()))
 
-	await a.merge(b, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))
-	await b.merge(a, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))
+	await merge(b, a, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))
+	await merge(a, b, (_, [x], [y]) => new Uint8Array([Math.max(x, y)]))
 
 	const delta = await compareEntries(t, a.entries(), b.entries())
 	t.is(delta, 0)

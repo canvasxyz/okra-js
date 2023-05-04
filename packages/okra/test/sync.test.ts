@@ -1,6 +1,6 @@
 import test, { ExecutionContext } from "ava"
 
-import { Delta, collect } from "@canvas-js/okra"
+import { Delta, collect, sync } from "@canvas-js/okra"
 
 import { getKey, defaultValue, random, initialize, iota } from "./utils.js"
 
@@ -10,7 +10,7 @@ test("test sync empty source", async (t) => {
 		initialize(t, iota(3), { K: 16, Q: 4 }),
 	])
 
-	t.deepEqual(await collect(target.delta(source)), [
+	t.deepEqual(await collect(sync(source, target)), [
 		{ key: Buffer.from("00000000", "hex"), source: null, target: Buffer.from("ffffffff", "hex") },
 		{ key: Buffer.from("00000001", "hex"), source: null, target: Buffer.from("ffffffff", "hex") },
 		{ key: Buffer.from("00000002", "hex"), source: null, target: Buffer.from("ffffffff", "hex") },
@@ -23,7 +23,7 @@ test("test sync empty target", async (t) => {
 		initialize(t, [], { K: 16, Q: 4 }),
 	])
 
-	t.deepEqual(await collect(target.delta(source)), [
+	t.deepEqual(await collect(sync(source, target)), [
 		{ key: Buffer.from("00000000", "hex"), source: Buffer.from("ffffffff", "hex"), target: null },
 		{ key: Buffer.from("00000001", "hex"), source: Buffer.from("ffffffff", "hex"), target: null },
 		{ key: Buffer.from("00000002", "hex"), source: Buffer.from("ffffffff", "hex"), target: null },
@@ -69,7 +69,7 @@ async function testDelta(
 
 	expected.sort(({ key: a }, { key: b }) => Buffer.from(a).compare(Buffer.from(b)))
 
-	t.deepEqual(await collect(target.delta(source)), expected)
+	t.deepEqual(await collect(sync(source, target)), expected)
 }
 
 test("testDelta(100, 10, 10) x 10", async (t) => {

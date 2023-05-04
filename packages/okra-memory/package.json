@@ -1,7 +1,7 @@
 {
 	"private": true,
 	"name": "@canvas-js/okra-memory",
-	"description": "Temporary okra database backed by an in-memory red/black tree",
+	"description": "Temporary Okra database backed by an in-memory red/black tree",
 	"version": "0.0.0",
 	"type": "module",
 	"main": "lib/index.js",
@@ -21,9 +21,9 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@ava/typescript": "^4.0.0",
-		"@types/node": "^18.15.11",
+		"@types/node": "^18.16.3",
 		"ava": "^5.2.0",
-		"typescript": "^5.0.3"
+		"typescript": "^5.0.4"
 	},
 	"dependencies": {
 		"@canvas-js/okra": "0.0.0",

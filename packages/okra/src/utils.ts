@@ -1,7 +1,11 @@
-import type { Bound, Key, Node } from "./interface.js"
+import type { Key, Node } from "./interface.js"
 
-export function assert(condition: unknown, message?: string): asserts condition {
+export function assert(condition: unknown, message?: string, ...args: any[]): asserts condition {
 	if (!condition) {
+		if (args && args.length > 0) {
+			console.error(...args)
+		}
+
 		throw new Error(message ?? "Internal error")
 	}
 }

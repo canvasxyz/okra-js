@@ -3,6 +3,11 @@ import { Node, Key, Source, Target, Delta, Bound } from "./interface.js"
 import { debug } from "./format.js"
 import { assert, equalArrays, equalKeys, equalNodes, lessThan } from "./utils.js"
 
+export async function* sync(source: Source, target: Target): AsyncIterableIterator<Delta> {
+	const driver = new Driver(source, target)
+	yield* driver.sync()
+}
+
 export class Driver {
 	private static indent = "│ "
 

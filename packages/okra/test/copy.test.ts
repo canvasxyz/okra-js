@@ -2,6 +2,18 @@ import test, { ExecutionContext } from "ava"
 
 import { getKey, compareEntries, random, initialize, iota } from "./utils.js"
 
+import { Source, Tree, sync } from "@canvas-js/okra"
+
+async function copy(source: Source, target: Tree): Promise<void> {
+	for await (const delta of sync(source, target)) {
+		if (delta.source === null) {
+			await target.delete(delta.key)
+		} else {
+			await target.set(delta.key, delta.source)
+		}
+	}
+}
+
 async function testCopy(
 	t: ExecutionContext,
 	seed: string,
@@ -22,7 +34,7 @@ async function testCopy(
 		await target.delete(getKey(i))
 	}
 
-	await target.copy(source)
+	await copy(source, target)
 
 	const delta = await compareEntries(t, target.entries(), source.entries())
 	t.is(delta, 0)

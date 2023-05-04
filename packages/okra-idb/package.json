@@ -1,7 +1,7 @@
 {
 	"private": true,
 	"name": "@canvas-js/okra-idb",
-	"description": "Persistent okra database backed by IndexedDB",
+	"description": "Persistent Okra database backed by IndexedDB",
 	"version": "0.0.0",
 	"type": "module",
 	"main": "lib/index.js",
@@ -25,11 +25,11 @@
 	},
 	"devDependencies": {
 		"@ava/typescript": "^4.0.0",
-		"@types/node": "^18.15.11",
+		"@types/node": "^18.16.3",
 		"ava": "^5.2.0",
 		"fake-indexeddb": "^4.0.1",
 		"idb": "^7.1.1",
-		"typescript": "^5.0.3"
+		"typescript": "^5.0.4"
 	},
 	"peerDependencies": {
 		"idb": "^7.1.1"

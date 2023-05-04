@@ -12,10 +12,12 @@ export type Node = {
 	value?: Uint8Array
 }
 
+type Awaitable<T> = Promise<T> | T
+
 export interface Source {
-	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
-	getChildren(level: number, key: Key): Promise<Node[]>
+	getRoot(): Awaitable<Node>
+	getNode(level: number, key: Key): Awaitable<Node | null>
+	getChildren(level: number, key: Key): Awaitable<Node[]>
 }
 
 export type Bound<K> = { key: K; inclusive: boolean }
@@ -30,9 +32,9 @@ export interface Target extends Source {
 }
 
 export interface KeyValueStore {
-	get(key: Uint8Array): Promise<Uint8Array | null>
-	set(key: Uint8Array, value: Uint8Array): Promise<void>
-	delete(key: Uint8Array): Promise<void>
+	get(key: Uint8Array): Awaitable<Uint8Array | null>
+	set(key: Uint8Array, value: Uint8Array): Awaitable<void>
+	delete(key: Uint8Array): Awaitable<void>
 	entries(
 		lowerBound?: Bound<Uint8Array> | null,
 		upperBound?: Bound<Uint8Array> | null,

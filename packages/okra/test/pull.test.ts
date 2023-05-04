@@ -1,6 +1,21 @@
 import test, { ExecutionContext } from "ava"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { iota, getKey, compareEntries, random, initialize } from "./utils.js"
+
+import { Source, Tree, sync } from "@canvas-js/okra"
+
+async function pull(source: Source, target: Tree): Promise<void> {
+	for await (const delta of sync(source, target)) {
+		if (delta.source === null) {
+			continue
+		} else if (delta.target === null) {
+			await target.set(delta.key, delta.source)
+		} else {
+			throw new Error(`Conflict at key ${hex(delta.key)}`)
+		}
+	}
+}
 
 async function testPull(
 	t: ExecutionContext,
@@ -26,8 +41,8 @@ async function testPull(
 		await b.delete(getKey(i))
 	}
 
-	await b.pull(a)
-	await a.pull(b)
+	await pull(a, b)
+	await pull(b, a)
 
 	const delta = await compareEntries(t, b.entries(), a.entries())
 	t.is(delta, 0)
