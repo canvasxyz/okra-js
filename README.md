@@ -471,6 +471,8 @@ declare class Tree implements Source, KeyValueStore {
 
 ## Contributing
 
+This is an early project that is stil best treated as a research prototype. Feel free to open an issue if you find bugs or have thoughts about API design.
+
 ## License
 
 MIT © 2023 Canvas Technologies, Inc.
