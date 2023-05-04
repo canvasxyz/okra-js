@@ -1,5 +1,4 @@
 {
-	"private": true,
 	"name": "@canvas-js/okra",
 	"description": "A p2p merkle index in pure JavaScript",
 	"version": "0.0.1",

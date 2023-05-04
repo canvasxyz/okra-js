@@ -1,5 +1,4 @@
 {
-	"private": true,
 	"name": "@canvas-js/okra-memory",
 	"description": "Temporary Okra database backed by an in-memory red/black tree",
 	"version": "0.0.1",

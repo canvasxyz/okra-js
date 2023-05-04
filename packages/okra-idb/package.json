@@ -1,5 +1,4 @@
 {
-	"private": true,
 	"name": "@canvas-js/okra-idb",
 	"description": "Persistent Okra database backed by IndexedDB",
 	"version": "0.0.1",
