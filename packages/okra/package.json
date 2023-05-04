@@ -2,7 +2,7 @@
 	"private": true,
 	"name": "@canvas-js/okra",
 	"description": "A p2p merkle index in pure JavaScript",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",

@@ -2,7 +2,7 @@
 	"private": true,
 	"name": "@canvas-js/okra-idb",
 	"description": "Persistent Okra database backed by IndexedDB",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -20,7 +20,7 @@
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"dependencies": {
-		"@canvas-js/okra": "0.0.0",
+		"@canvas-js/okra": "0.0.1",
 		"debug": "^4.3.4"
 	},
 	"devDependencies": {
