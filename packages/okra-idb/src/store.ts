@@ -14,11 +14,13 @@ export class IDBStore implements KeyValueStore {
 
 	public async write<T>(callback: () => Promise<T>) {
 		this.txn = this.db.transaction(this.storeName, "readwrite")
+
 		try {
 			const result = await callback()
 			this.txn.commit()
 			return result
 		} catch (err) {
+			console.error(err)
 			this.txn.abort()
 		} finally {
 			this.txn = null
@@ -30,7 +32,6 @@ export class IDBStore implements KeyValueStore {
 		try {
 			return await callback()
 		} finally {
-			this.txn.abort()
 			this.txn = null
 		}
 	}
@@ -64,8 +65,6 @@ export class IDBStore implements KeyValueStore {
 	}
 
 	async delete(key: Uint8Array): Promise<void> {
-		console.log(`delete(%h})`, key)
-
 		assert(this.txn !== null, "Internal error: this.txn !== null")
 		const store = this.txn.objectStore(this.storeName)
 
@@ -105,11 +104,12 @@ export class IDBStore implements KeyValueStore {
 			}
 
 			if (cursor.value instanceof Uint8Array) {
-				console.log("[okra-idb] -", [hex(key), hex(cursor.value)])
 				yield [key, cursor.value]
 			} else {
 				throw new Error("Unexpected cursor value type")
 			}
+
+			cursor = await cursor.continue()
 		}
 	}
 }

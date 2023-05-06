@@ -30,18 +30,16 @@ test("open tree", async (t) => {
 
 test("get/set/delete", async (t) => {
 	const tree = await openTree(t)
-	t.log("got tree", tree)
 
 	const encoder = new TextEncoder()
 	const e = (value: string) => encoder.encode(value)
 
 	await tree.set(e("a"), e("foo"))
-	// await tree.set(e("a"), e("bar"))
+	await tree.set(e("a"), e("bar"))
 
-	// t.deepEqual(await tree.get(e("a")), e("bar"))
-	// await tree.delete(e("a"))
-	// t.deepEqual(await tree.get(e("a")), null)
-	// await tree.delete(e("a"))
-	// t.deepEqual(await tree.get(e("a")), null)
-	t.pass()
+	t.deepEqual(await tree.get(e("a")), e("bar"))
+	await tree.delete(e("a"))
+	t.deepEqual(await tree.get(e("a")), null)
+	await tree.delete(e("a"))
+	t.deepEqual(await tree.get(e("a")), null)
 })

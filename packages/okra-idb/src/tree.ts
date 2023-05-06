@@ -21,41 +21,72 @@ export class IDBTree extends Tree {
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
-		await this.store.write(() => super.set(key, value))
+		if (this.store.txn === null) {
+			await this.store.write(() => super.set(key, value))
+		} else {
+			await super.set(key, value)
+		}
 	}
 
 	public async delete(key: Uint8Array): Promise<void> {
-		await this.store.write(() => super.delete(key))
+		if (this.store.txn === null) {
+			await this.store.write(() => super.delete(key))
+		} else {
+			await super.delete(key)
+		}
 	}
 
 	public async getRoot(): Promise<Node> {
-		return this.store.read(() => super.getRoot())
+		if (this.store.txn === null) {
+			return this.store.read(() => super.getRoot())
+		} else {
+			return super.getRoot()
+		}
 	}
 
 	public getNode(level: number, key: Key): Promise<Node | null> {
-		return this.store.read(() => super.getNode(level, key))
+		if (this.store.txn === null) {
+			return this.store.read(() => super.getNode(level, key))
+		} else {
+			return super.getNode(level, key)
+		}
 	}
 
 	public getChildren(level: number, key: Key): Promise<Node[]> {
-		return this.store.read(() => super.getChildren(level, key))
+		if (this.store.txn === null) {
+			return this.store.read(() => super.getChildren(level, key))
+		} else {
+			return super.getChildren(level, key)
+		}
 	}
 
-	// This one is tricky :/
 	public async *nodes(
 		level: number,
 		lowerBound: Bound<Key> | null = null,
 		upperBound: Bound<Key> | null = null,
 		{ reverse = false }: { reverse?: boolean | undefined } = {}
-	): AsyncGenerator<Node> {}
+	): AsyncGenerator<Node, void, undefined> {
+		if (this.store.txn === null) {
+			// TODO: fix this
+			throw new Error("can only call nodes() from within a managed transaction")
+		} else {
+			yield* super.nodes(level, lowerBound, upperBound, { reverse })
+		}
+	}
 
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
 		{ reverse = false }: { reverse?: boolean | undefined } = {}
 	): AsyncGenerator<[Uint8Array, Uint8Array]> {
-		for await (const leaf of this.nodes(0, lowerBound ?? { key: null, inclusive: false }, upperBound, { reverse })) {
-			assert(leaf.key !== null && leaf.value !== undefined)
-			yield [leaf.key, leaf.value]
+		if (this.store.txn === null) {
+			// TODO: fix this
+			throw new Error("can only call entries() from within a managed transaction")
+		} else {
+			for await (const leaf of this.nodes(0, lowerBound ?? { key: null, inclusive: false }, upperBound, { reverse })) {
+				assert(leaf.key !== null && leaf.value !== undefined, "invalid leaf entry")
+				yield [leaf.key, leaf.value]
+			}
 		}
 	}
 }
