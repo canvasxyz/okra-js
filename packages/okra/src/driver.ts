@@ -3,12 +3,16 @@ import { Node, Key, Source, Target, Delta, Bound } from "./interface.js"
 import { debug } from "./format.js"
 import { assert, equalArrays, equalKeys, equalNodes, lessThan } from "./utils.js"
 
-export async function* sync(source: Source, target: Target): AsyncIterableIterator<Delta> {
-	const driver = new Driver(source, target)
+export async function* sync(
+	source: Source,
+	target: Target,
+	options?: { sourceOnly?: boolean }
+): AsyncIterableIterator<Delta> {
+	const driver = new Driver(source, target, options)
 	yield* driver.sync()
 }
 
-export class Driver {
+class Driver {
 	private static indent = "│ "
 
 	private depth = 0
@@ -29,7 +33,11 @@ export class Driver {
 	 */
 	private cursor: Bound<Key> | null = null
 
-	constructor(readonly source: Source, readonly target: Target) {}
+	constructor(
+		private readonly source: Source,
+		private readonly target: Target,
+		private readonly options: { sourceOnly?: boolean } = {}
+	) {}
 
 	private log(format: string, ...args: any[]) {
 		this.formatter("%s" + format, Driver.indent.repeat(this.depth), ...args)
