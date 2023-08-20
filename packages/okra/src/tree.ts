@@ -6,7 +6,7 @@ import type { Metadata, Key, Node, KeyValueStore, Target, Bound } from "./interf
 import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
 import { debug } from "./format.js"
-import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
+import { DEFAULT_K, DEFAULT_Q, MAXIMUM_HEIGHT } from "./constants.js"
 import { assert, equalKeys, lessThan } from "./utils.js"
 
 type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
@@ -304,7 +304,7 @@ export class Tree extends NodeStore implements Target, KeyValueStore {
 	 * Get the root node of the merkle tree. Returns the leaf anchor node if the tree is empty.
 	 */
 	public async getRoot(): Promise<Node> {
-		const upperBound = { key: NodeStore.metadataKey, inclusive: false }
+		const upperBound = { key: new Uint8Array([MAXIMUM_HEIGHT]), inclusive: false }
 		for await (const entry of this.store.entries(null, upperBound, { reverse: true })) {
 			const node = this.parseEntry(entry)
 			assert(node.key === null, "Internal error: unexpected root node key", node)
