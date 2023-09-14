@@ -1,0 +1,3 @@
+[submodule "packages/okra-node/libs/okra"]
+	path = packages/okra-node/libs/okra
+	url = git@github.com:canvasxyz/okra.git
