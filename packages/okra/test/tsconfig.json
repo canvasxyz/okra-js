@@ -5,5 +5,10 @@
 		"rootDir": ".",
 		"skipLibCheck": true
 	},
-	"references": [{ "path": "../." }, { "path": "../../okra-memory" }]
+	"references": [
+		{ "path": "../." },
+		{ "path": "../../okra-idb" },
+		{ "path": "../../okra-memory" },
+		{ "path": "../../okra-node" }
+	]
 }

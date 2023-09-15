@@ -1,7 +1,7 @@
 import test from "ava"
 
-import { compareEntries, iota } from "./utils.js"
 import { MemoryStore } from "@canvas-js/okra-memory"
+import { compareEntries, iota } from "./utils.js"
 
 test("compare entries iota(10)", async (t) => {
 	const [a, b] = [new MemoryStore(), new MemoryStore()]

@@ -1,5 +1,7 @@
 # `@canvas-js/okra-memory`
 
+[![NPM version](https://img.shields.io/npm/v/@canvas-js/okra-memory)](https://www.npmjs.com/package/@canvas-js/okra-memory) ![TypeScript types](https://img.shields.io/npm/types/@canvas-js/okra-memory)
+
 ## Install
 
 ```

@@ -1,8 +1,8 @@
 import test, { ExecutionContext } from "ava"
 
-import { Delta, collect, sync } from "@canvas-js/okra"
+import { Delta, KeyValueStore, collect, sync } from "@canvas-js/okra"
 
-import { getKey, defaultValue, random, initialize, iota } from "./utils.js"
+import { getKey, defaultValue, random, initialize, iota, getEnvironment } from "./utils.js"
 
 test("test sync empty source", async (t) => {
 	const [source, target] = await Promise.all([
@@ -30,7 +30,7 @@ test("test sync empty target", async (t) => {
 	])
 })
 
-async function testDelta(
+async function testDeltaMemory(
 	t: ExecutionContext,
 	seed: string,
 	count: number,
@@ -42,6 +42,53 @@ async function testDelta(
 		initialize(t, iota(count), { K: 16, Q: 4 }),
 	])
 
+	const expected = await initializeDelta(source, target, seed, count, deleteSource, deleteTarget)
+
+	const actual = await collect(sync(source, target))
+	t.deepEqual(
+		actual,
+		expected.map(({ key, source, target }) => ({
+			key: Buffer.from(key),
+			source: source && Buffer.from(source),
+			target: target && Buffer.from(target),
+		}))
+	)
+}
+
+async function testDeltaNode(
+	t: ExecutionContext,
+	seed: string,
+	count: number,
+	deleteSource: number,
+	deleteTarget: number
+): Promise<void> {
+	const [source, target] = [getEnvironment(t), getEnvironment(t)]
+	const expected = await source.writeTree(async (sourceTxn) => {
+		return await target.writeTree(async (targetTxn) => {
+			for (const [key, value] of iota(count)) {
+				sourceTxn.set(key, value)
+				targetTxn.set(key, value)
+			}
+
+			return await initializeDelta(sourceTxn, targetTxn, seed, count, deleteSource, deleteTarget)
+		})
+	})
+
+	const actual = await source.readTree((sourceTxn) =>
+		target.readTree((targetTxn) => collect(sync(sourceTxn, targetTxn)))
+	)
+
+	t.deepEqual(actual, expected)
+}
+
+async function initializeDelta(
+	source: KeyValueStore,
+	target: KeyValueStore,
+	seed: string,
+	count: number,
+	deleteSource: number,
+	deleteTarget: number
+): Promise<Delta[]> {
 	const expected: Delta[] = []
 
 	const deletedFromSource = new Set<number>(random(`${seed}:source`, 0, count, deleteSource))
@@ -68,27 +115,47 @@ async function testDelta(
 	}
 
 	expected.sort(({ key: a }, { key: b }) => Buffer.from(a).compare(Buffer.from(b)))
-
-	t.deepEqual(await collect(sync(source, target)), expected)
+	return expected
 }
 
-test("testDelta(100, 10, 10) x 10", async (t) => {
+test("testDeltaMemory(100, 10, 10) x 10", async (t) => {
 	t.timeout(2 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
-		await testDelta(t, `delta:100:${i}`, 100, 10, 10)
+		await testDeltaMemory(t, `delta:100:${i}`, 100, 10, 10)
 	}
 })
 
-test("testDelta(1000, 20, 20) x 10", async (t) => {
+test("testDeltaNode(100, 10, 10) x 10", async (t) => {
 	t.timeout(2 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
-		await testDelta(t, `delta:1000:${i}`, 1000, 20, 20)
+		await testDeltaNode(t, `delta:100:${i}`, 100, 10, 10)
 	}
 })
 
-test("testDelta(10000, 100, 100) x 10", async (t) => {
-	t.timeout(5 * 60 * 1000)
+test("testDeltaMemory(1000, 20, 20) x 10", async (t) => {
+	t.timeout(2 * 60 * 1000)
 	for (let i = 0; i < 10; i++) {
-		await testDelta(t, `delta:10000:${i}`, 10000, 100, 100)
+		await testDeltaMemory(t, `delta:1000:${i}`, 1000, 20, 20)
+	}
+})
+
+test("testDeltaNode(1000, 20, 20) x 10", async (t) => {
+	t.timeout(2 * 60 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testDeltaNode(t, `delta:1000:${i}`, 1000, 20, 20)
+	}
+})
+
+test("testDeltaNode(10000, 100, 100) x 10", async (t) => {
+	t.timeout(10 * 1000)
+	for (let i = 0; i < 10; i++) {
+		await testDeltaNode(t, `delta:10000:${i}`, 10000, 100, 100)
+	}
+})
+
+test("testDeltaNode(100000, 100, 100) x 5", async (t) => {
+	t.timeout(10 * 1000)
+	for (let i = 0; i < 5; i++) {
+		await testDeltaNode(t, `delta:100000:${i}`, 100000, 100, 100)
 	}
 })

@@ -1,5 +1,7 @@
 # `@canvas-js/okra-idb`
 
+[![NPM version](https://img.shields.io/npm/v/@canvas-js/okra-idb)](https://www.npmjs.com/package/@canvas-js/okra-idb) ![TypeScript types](https://img.shields.io/npm/types/@canvas-js/okra-idb)
+
 ## Install
 
 ```

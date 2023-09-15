@@ -12,24 +12,9 @@ export type Node = {
 	value?: Uint8Array
 }
 
-type Awaitable<T> = Promise<T> | T
+export type Awaitable<T> = Promise<T> | T
 
-export interface Source {
-	getRoot(): Awaitable<Node>
-	getNode(level: number, key: Key): Awaitable<Node | null>
-	getChildren(level: number, key: Key): Awaitable<Node[]>
-}
-
-export type Bound<K> = { key: K; inclusive: boolean }
-
-export interface Target extends Source {
-	nodes(
-		level: number,
-		lowerBound?: Bound<Key> | null,
-		upperBound?: Bound<Key> | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<Node>
-}
+export type Bound<T = Uint8Array> = { key: T; inclusive: boolean }
 
 export interface KeyValueStore {
 	get(key: Uint8Array): Awaitable<Uint8Array | null>
@@ -42,6 +27,21 @@ export interface KeyValueStore {
 	): AsyncIterableIterator<Entry>
 }
 
-export type Entry = [Uint8Array, Uint8Array]
+export type Entry = [key: Uint8Array, value: Uint8Array]
+
+export interface Source {
+	getRoot(): Awaitable<Node>
+	getNode(level: number, key: Key): Awaitable<Node | null>
+	getChildren(level: number, key: Key): Awaitable<Node[]>
+}
+
+export interface Target extends Source {
+	nodes(
+		level: number,
+		lowerBound?: Bound<Key> | null,
+		upperBound?: Bound<Key> | null,
+		options?: { reverse?: boolean }
+	): AsyncIterableIterator<Node>
+}
 
 export type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }

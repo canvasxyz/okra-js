@@ -1,9 +1,26 @@
-import type { ExecutionContext } from "ava"
-import { bytesToHex as hex } from "@noble/hashes/utils"
-import Prando from "prando"
+import path from "node:path"
+import os from "node:os"
+import fs from "node:fs"
 
+import type { ExecutionContext } from "ava"
+import Prando from "prando"
+import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils"
+import { nanoid } from "nanoid"
+
+import { Node, Tree, Builder, DEFAULT_METADATA, Entry } from "@canvas-js/okra"
 import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
-import { Node, Tree, Builder, DEFAULT_METADATA } from "@canvas-js/okra"
+import { Environment, EnvironmentOptions } from "@canvas-js/okra-node"
+
+export function getEnvironment(t: ExecutionContext, options: EnvironmentOptions = {}) {
+	const directory = path.resolve(os.tmpdir(), nanoid())
+	const env = new Environment(directory, options)
+	t.teardown(() => {
+		env.close()
+		fs.rmSync(directory, { recursive: true })
+	})
+
+	return env
+}
 
 export async function initialize(
 	t: ExecutionContext,
@@ -20,18 +37,16 @@ export async function initialize(
 	return new MemoryTree(store, metadata)
 }
 
-export const defaultValue = Buffer.from([0xff, 0xff, 0xff, 0xff])
+export const defaultValue = hexToBytes("ffffffff")
 
-export function getKey(i: number): Buffer {
-	const key = Buffer.alloc(4)
-	key.writeUint32BE(i)
-	return key
+export function getKey(i: number): Uint8Array {
+	const buffer = new ArrayBuffer(4)
+	const view = new DataView(buffer)
+	view.setUint32(0, i)
+	return new Uint8Array(buffer)
 }
 
-export function* iota(
-	count: number,
-	getValue: (i: number) => Uint8Array = (i) => Buffer.from(defaultValue)
-): Iterable<[Uint8Array, Uint8Array]> {
+export function* iota(count: number, getValue: (i: number) => Uint8Array = (i) => defaultValue): Iterable<Entry> {
 	for (let i = 0; i < count; i++) {
 		yield [getKey(i), getValue(i)]
 	}
@@ -39,8 +54,8 @@ export function* iota(
 
 export async function compareEntries(
 	t: ExecutionContext<unknown>,
-	a: AsyncIterable<[Uint8Array, Uint8Array]>,
-	b: AsyncIterable<[Uint8Array, Uint8Array]>
+	a: AsyncIterable<Entry>,
+	b: AsyncIterable<Entry>
 ): Promise<number> {
 	const iterA = a[Symbol.asyncIterator]()
 	const iterB = b[Symbol.asyncIterator]()
@@ -131,5 +146,11 @@ export function compare(a: Node, b: Node): -1 | 0 | 1 {
 		return -1
 	} else {
 		return 0
+	}
+}
+
+export function* map<I, O>(iter: Iterable<I>, f: (value: I) => O): Iterable<O> {
+	for (const value of iter) {
+		yield f(value)
 	}
 }

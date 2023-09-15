@@ -1,7 +1,7 @@
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import type { Metadata, Key, Node, KeyValueStore, Target, Bound } from "./interface.js"
+import type { Metadata, Key, Node, KeyValueStore, Target, Bound, Source } from "./interface.js"
 
 import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
@@ -15,7 +15,7 @@ type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "
 const Result = { Update: 0, Delete: 1 } as const
 type Result = (typeof Result)[keyof typeof Result]
 
-export class Tree extends NodeStore implements Target, KeyValueStore {
+export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 	private static leafEntryLowerBound = { key: NodeStore.createEntryKey(0, null), inclusive: false }
 	private static leafEntryUpperBound = { key: NodeStore.createEntryKey(1, null), inclusive: false }
 

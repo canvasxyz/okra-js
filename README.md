@@ -1,6 +1,6 @@
 # okra-js
 
-A p2p merkle index in pure JavaScript.
+A p2p merklized database index.
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@ A p2p merkle index in pure JavaScript.
   - [Iterating over ranges of entries](#iterating-over-ranges-of-entries)
   - [Exposing the internal merkle tree nodes](#exposing-the-internal-merkle-tree-nodes)
   - [Syncing with a remote source](#syncing-with-a-remote-source)
-  - [Common syncing patterns](#common-syncing-patterns)
+  - [Basic syncing patterns](#basic-syncing-patterns)
   - [Debugging](#debugging)
 - [Testing](#testing)
 - [API](#api)
@@ -23,10 +23,6 @@ A p2p merkle index in pure JavaScript.
 
 Okra is a key/value store augmented with a merkle tree index. You can use it like a regular key/value store, with `get`/`set`/`delete` methods and an `entries()` iterator. The merkle tree enables **efficient syncing** by iterating over the missing, extra, or conflicting entries between a local and remote Okra database.
 
-Okra can be used as a **natural persistence layer for operation-based CRDTs**, directly as a persistent state-based CRDT map with efficient merging, "rsync for key/value stores", and much more. Read through the examples in the usage section to see it in action.
-
-This repo is one of two compatible reference implementations. The other is [canvasxyz/okra](https://github.com/canvasxyz/okra), which is written in Zig and can also be installed as a native NodeJS module.
-
 ## Install
 
 The core package `@canvas-js/okra` has a generic tree that must be provided with a backing key/value store.
@@ -35,10 +31,10 @@ The core package `@canvas-js/okra` has a generic tree that must be provided with
 npm i @canvas-js/okra
 ```
 
-The `@canvas-js/okra-idb` and `@canvas-js/okra-memory` instantiate the generic tree with an IndexedDB object store and an in-memory red/black tree, respectively.
+The `@canvas-js/okra-idb` and `@canvas-js/okra-memory` instantiate the generic tree with an IndexedDB object store and an in-memory red/black tree, respectively. The `@canvas-js/okra-node` exports compatible native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra).
 
 ```
-npm i @canvas-js/okra-idb @canvas-js/okra-memory
+npm i @canvas-js/okra-idb @canvas-js/okra-memory @canvas-js/okra-node
 ```
 
 ## Usage
@@ -267,7 +263,7 @@ However, thanks to the specific behavior of the sync algorithm, the **target tre
 
 The Zig implementation and its NodeJS bindings support snapshots and thus can process a read-write transaction with abitrarily many concurrent read-only transactions.
 
-### Common syncing patterns
+### Basic syncing patterns
 
 Calling `sync(source, target)` does not automatically modify `target` - it only iterates over the differences. Taking action in response to each delta is up to you! Here are three examples of using `sync`.
 
@@ -438,7 +434,7 @@ interface KeyValueStore {
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]>
 }
 
-declare class Tree implements Source, KeyValueStore {
+declare class Tree implements KeyValueStore, Source, Target {
 	protected constructor(store: KeyValueStore, options?: { K?: number; Q?: number })
 
 	// closes the underlying store

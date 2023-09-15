@@ -18,18 +18,6 @@ export class NodeStore {
 		this.limit = Number((1n << 32n) / BigInt(metadata.Q))
 	}
 
-	public async setUserdata(userdata: Uint8Array | null) {
-		if (userdata === null) {
-			await this.store.delete(NodeStore.userdataKey)
-		} else {
-			await this.store.set(NodeStore.userdataKey, userdata)
-		}
-	}
-
-	public async getUserdata(): Promise<Uint8Array | null> {
-		return await this.store.get(NodeStore.userdataKey)
-	}
-
 	protected async initialize() {
 		const metadata = await this.getMetadata()
 		if (metadata === null) {
