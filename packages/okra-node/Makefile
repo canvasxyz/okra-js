@@ -1,11 +1,9 @@
 FLAGS=-dynamic -fallow-shlib-undefined -lc -O ReleaseSafe
-# MODULES=--deps okra --mod lmdb::./libs/okra/libs/zig-lmdb/src/lib.zig --mod okra:lmdb:./libs/okra/src/lib.zig
 MODULES=--deps okra,lmdb --mod okra:lmdb:./libs/okra/src/lib.zig --mod lmdb::./libs/okra/libs/zig-lmdb/src/lib.zig
 INCLUDES=-isystem /usr/local/include/node -I./libs/okra/libs/zig-lmdb/libs/openldap/libraries/liblmdb
 SOURCES=./libs/okra/libs/zig-lmdb/libs/openldap/libraries/liblmdb/mdb.c ./libs/okra/libs/zig-lmdb/libs/openldap/libraries/liblmdb/midl.c ./napi/lib.zig
 
-# all: build/x64-linux-glibc build/x64-linux-musl build/arm64-linux-glibc build/arm64-linux-musl build/x64-darwin build/arm64-darwin
-all: build/arm64-darwin
+all: build/x64-linux-glibc build/x64-linux-musl build/arm64-linux-glibc build/arm64-linux-musl build/x64-darwin build/arm64-darwin
 
 build/x64-linux-glibc:
 	mkdir -p build/x64-linux-glibc
