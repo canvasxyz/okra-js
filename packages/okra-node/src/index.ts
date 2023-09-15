@@ -1,11 +1,11 @@
 import { createRequire } from "node:module"
 
 import { familySync } from "detect-libc"
+import PQueue from "p-queue"
 
-import { KeyValueStore, Bound, Entry, lessThan, Awaitable, Node, Key, Source, Target } from "@canvas-js/okra"
+import { KeyValueStore, Bound, Entry, lessThan, Node, Key, Source, Target, Awaitable } from "@canvas-js/okra"
 import { equals } from "uint8arrays"
 import assert from "node:assert"
-import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils"
 
 const family = familySync()
 
@@ -27,12 +27,15 @@ export interface EnvironmentOptions {
 
 export class Environment extends okra.Environment {
 	#open = true
+	#queue = new PQueue({ concurrency: 1 })
 
 	constructor(public readonly path: string, options: EnvironmentOptions = {}) {
 		super(path, options)
 	}
 
-	public close() {
+	public async close() {
+		this.#queue.clear()
+		await this.#queue.onIdle()
 		if (this.#open) {
 			super.close()
 			this.#open = false
@@ -71,15 +74,19 @@ export class Environment extends okra.Environment {
 		callback: (txn: Transaction) => Awaitable<T>,
 		options: { dbi?: DatabaseName | DatabaseID } = {}
 	): Promise<T> {
-		const txn = new Transaction(this, { ...options, readOnly: false })
-		try {
-			const result = await callback(txn)
-			txn.commit()
-			return result
-		} catch (err) {
-			txn.abort()
-			throw err
-		}
+		let result: T | null = null
+		await this.#queue.add(async () => {
+			const txn = new Transaction(this, { ...options, readOnly: false })
+			try {
+				result = await callback(txn)
+				txn.commit()
+			} catch (err) {
+				txn.abort()
+				throw err
+			}
+		})
+
+		return result!
 	}
 
 	public writeTree<T>(
