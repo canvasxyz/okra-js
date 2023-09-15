@@ -10,7 +10,6 @@ import { OKRA_VERSION } from "./constants.js"
  */
 export class NodeStore {
 	protected static metadataKey = new Uint8Array([0xff])
-	protected static userdataKey = new Uint8Array([0xfe])
 	protected static anchorLeafKey = new Uint8Array([0])
 
 	private readonly limit: number
