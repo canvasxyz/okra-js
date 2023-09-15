@@ -1,6 +1,6 @@
 {
 	"private": true,
-	"description": "A p2p merkle index in pure JavaScript",
+	"description": "A p2p merklized database index",
 	"version": "0.1.0",
 	"type": "module",
 	"workspaces": [
@@ -10,7 +10,7 @@
 		"dev": "tsc --build --watch",
 		"build": "tsc --build",
 		"clean": "tsc --build --clean",
-		"test": "npm run test --workspace packages/okra"
+		"test": "npm run test --workspaces"
 	},
 	"repository": {
 		"type": "git",

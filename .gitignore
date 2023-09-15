@@ -2,3 +2,7 @@
 node_modules/
 **/lib/
 **/tsconfig.tsbuildinfo
+
+**/zig-cache/
+**/zig-out/
+**/build/
