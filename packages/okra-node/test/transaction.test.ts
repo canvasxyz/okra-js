@@ -20,7 +20,10 @@ test("get/set/delete", async (t) => {
 		t.deepEqual(txn.get(encode("d")), null)
 	})
 
-	await env.write((txn) => txn.delete(encode("b")))
+	await env.write(async (txn) => {
+		await txn.delete(encode("b"))
+		await txn.delete(encode("d"))
+	})
 
 	t.is(await env.read((txn) => txn.get(encode("b"))), null)
 })

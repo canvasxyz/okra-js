@@ -161,7 +161,9 @@ export class Transaction extends okra.Transaction implements KeyValueStore {
 
 	public delete(key: Uint8Array, options: { dbi?: DatabaseName | DatabaseID } = {}) {
 		const dbi = options.dbi ?? this.#dbi
-		super.delete(dbi, key)
+		if (super.get(dbi, key) !== null) {
+			super.delete(dbi, key)
+		}
 	}
 
 	public async *entries(
