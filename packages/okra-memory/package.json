@@ -20,13 +20,13 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@ava/typescript": "^4.1.0",
-		"@types/node": "^20.6.0",
+		"@types/node": "^20.7.1",
 		"ava": "^5.3.1",
 		"typescript": "^5.2.2"
 	},
 	"dependencies": {
 		"@canvas-js/okra": "^0.2.0",
-		"@types/debug": "^4.1.8",
+		"@types/debug": "^4.1.9",
 		"abstract-level": "^1.0.3",
 		"debug": "^4.3.4",
 		"memory-level": "^1.0.0"

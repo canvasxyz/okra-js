@@ -20,7 +20,7 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@ava/typescript": "^4.1.0",
-		"@types/node": "^20.6.0",
+		"@types/node": "^20.7.1",
 		"ava": "^5.3.1",
 		"nanoid": "^5.0.1",
 		"prando": "^6.0.1",
@@ -28,7 +28,7 @@
 	},
 	"dependencies": {
 		"@noble/hashes": "^1.3.2",
-		"@types/debug": "^4.1.8",
+		"@types/debug": "^4.1.9",
 		"abstract-level": "^1.0.3",
 		"debug": "^4.3.4"
 	}
