@@ -1,7 +1,7 @@
 {
 	"name": "@canvas-js/okra-memory",
 	"description": "Temporary Okra database backed by an in-memory red/black tree",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -29,6 +29,7 @@
 		"@types/debug": "^4.1.9",
 		"abstract-level": "^1.0.3",
 		"debug": "^4.3.4",
+		"events": "^3.3.0",
 		"memory-level": "^1.0.0"
 	}
 }
