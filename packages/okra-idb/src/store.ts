@@ -1,5 +1,3 @@
-import { bytesToHex as hex } from "@noble/hashes/utils"
-
 import { IDBPDatabase, IDBPTransaction } from "idb"
 
 import { Bound, KeyValueStore, assert } from "@canvas-js/okra"
@@ -10,7 +8,7 @@ export class IDBStore implements KeyValueStore {
 	private readonly log = debug("okra-idb:store")
 
 	public txn: IDBPTransaction<unknown, [string], IDBTransactionMode> | null = null
-	public constructor(private readonly db: IDBPDatabase, private readonly storeName: string) {}
+	public constructor(public readonly db: IDBPDatabase, public readonly storeName: string) {}
 
 	public async write<T>(callback: () => Promise<T>) {
 		this.txn = this.db.transaction(this.storeName, "readwrite")
