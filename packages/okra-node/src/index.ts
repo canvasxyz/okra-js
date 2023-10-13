@@ -31,7 +31,6 @@ export class Environment extends okra.Environment {
 
 	constructor(public readonly path: string, options: EnvironmentOptions = {}) {
 		super(path, options)
-		console.log("LOL LMAO OK")
 	}
 
 	public async close() {
