@@ -39,6 +39,8 @@ declare class Environment {
 
 	public close(): void
 
+	public resize(mapSize: number): void
+
 	public read<T>(
 		callback: (txn: Transaction) => Awaitable<T>,
 		options?: { dbi?: DatabaseName | DatabaseID }

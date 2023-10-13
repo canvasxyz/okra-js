@@ -1,11 +1,11 @@
+import assert from "node:assert"
 import { createRequire } from "node:module"
 
 import { familySync } from "detect-libc"
+import { equals } from "uint8arrays"
 import PQueue from "p-queue"
 
 import { KeyValueStore, Bound, Entry, lessThan, Node, Key, Source, Target, Awaitable } from "@canvas-js/okra"
-import { equals } from "uint8arrays"
-import assert from "node:assert"
 
 const family = familySync()
 
@@ -31,6 +31,7 @@ export class Environment extends okra.Environment {
 
 	constructor(public readonly path: string, options: EnvironmentOptions = {}) {
 		super(path, options)
+		console.log("LOL LMAO OK")
 	}
 
 	public async close() {
@@ -42,6 +43,10 @@ export class Environment extends okra.Environment {
 		} else {
 			throw new Error("environment closed")
 		}
+	}
+
+	public async resize(mapSize: number) {
+		await this.#queue.add(() => super.resize(mapSize))
 	}
 
 	public async read<T>(

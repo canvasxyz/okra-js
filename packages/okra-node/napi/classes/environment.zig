@@ -14,6 +14,9 @@ pub const TypeTag = c.napi_type_tag{
 
 pub const methods = [_]n.Method{
     n.createMethod("close", 0, close),
+    // n.createMethod("stat", 0, stat),
+    // n.createMethod("info", 0, info),
+    n.createMethod("resize", 1, resize),
 };
 
 pub const argc = 2;
@@ -69,5 +72,42 @@ pub fn destroy(_: c.napi_env, finalize_data: ?*anyopaque, _: ?*anyopaque) callco
 pub fn close(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
     const env_ptr = try n.unwrap(lmdb.Environment, &TypeTag, env, this);
     env_ptr.close();
+    return null;
+}
+
+// pub fn stat(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
+//     const env_ptr = try n.unwrap(lmdb.Environment, &TypeTag, env, this);
+//     const env_stat = try env_ptr.stat();
+
+//     const result = try n.createObject(env);
+
+//     try n.setProperty(env, result, try n.createString(env, "pageSize"), env_stat.pize);
+//     try n.setProperty(env, result, try n.createString(env, "depth"), env_stat.depth);
+//     try n.setProperty(env, result, try n.createString(env, "branchPages"), env_stat.branch_pages);
+//     try n.setProperty(env, result, try n.createString(env, "leafPages"), env_stat.leaf_pages);
+//     try n.setProperty(env, result, try n.createString(env, "overflowPages"), env_stat.overflow_pages);
+//     try n.setProperty(env, result, try n.createString(env, "entries"), env_stat.entries);
+
+//     return result;
+// }
+
+// pub fn info(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
+//     const env_ptr = try n.unwrap(lmdb.Environment, &TypeTag, env, this);
+//     const env_info = try env_ptr.info();
+
+//     const result = try n.createObject(env);
+
+//     try n.setProperty(env, result, try n.createString(env, "mapSize"), env_info.map_size);
+//     try n.setProperty(env, result, try n.createString(env, "maxReaders"), env_info.max_readers);
+//     try n.setProperty(env, result, try n.createString(env, "numReaders"), env_info.num_readers);
+
+//     return result;
+// }
+
+pub fn resize(env: c.napi_env, this: c.napi_value, args: *const [1]c.napi_value) !c.napi_value {
+    const env_ptr = try n.unwrap(lmdb.Environment, &TypeTag, env, this);
+    const map_size = try n.parseUint32(env, args[0]);
+
+    try env_ptr.resize(map_size);
     return null;
 }
