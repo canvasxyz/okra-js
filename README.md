@@ -31,7 +31,7 @@ The core package `@canvas-js/okra` has a generic tree that must be provided with
 npm i @canvas-js/okra
 ```
 
-The `@canvas-js/okra-idb` and `@canvas-js/okra-memory` instantiate the generic tree with an IndexedDB object store and an in-memory red/black tree, respectively. The `@canvas-js/okra-node` exports compatible native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra).
+The `@canvas-js/okra-idb` and `@canvas-js/okra-memory` instantiate the generic pure-JS tree with an IndexedDB object store and an in-memory red/black tree, respectively. The `@canvas-js/okra-node` package exports compatible native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra).
 
 ```
 npm i @canvas-js/okra-idb @canvas-js/okra-memory @canvas-js/okra-node
@@ -56,10 +56,11 @@ type KeyRange = {
 }
 ```
 
-You can either use okra-js with your own implementation of `KeyValueStore`, or one of the two first-party packages:
+You can either use okra-js with your own implementation of `KeyValueStore`, or one of the three first-party packages:
 
 - [`@canvas-js/okra-memory`](./packages/okra-memory/), backed by an in-memory red/black tree
 - [`@canvas-js/okra-idb`](./packages/okra-idb/), backed by an IndexedDB object store
+- [`@canvas-js/okra-node`](./packages/okra-node/), backed by [LMDB](https://www.symas.com/lmdb) via a native NodeJS bindings
 
 The examples here all use `@canvas-js/okra-memory` for simplicity.
 
