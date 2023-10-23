@@ -8,6 +8,15 @@
 npm i @canvas-js/okra-node
 ```
 
+The following targets are supported:
+
+- `x86_64-linux-gnu`
+- `x86_64-linux-musl`
+- `aarch64-linux-gnu`
+- `aarch64-linux-musl`
+- `x86_64-macos`
+- `aarch64-macos`
+
 ## Usage
 
 ```ts
