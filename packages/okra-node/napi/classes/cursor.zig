@@ -32,9 +32,9 @@ pub const methods = [_]n.Method{
 pub const argc = 2;
 
 /// `new Cursor(txn, dbi)`
-pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
+pub fn create(env: c.napi_env, this: c.napi_value, args: *const [argc]c.napi_value) !c.napi_value {
     const txn_ptr = try n.unwrap(lmdb.Transaction, &Transaction.TypeTag, env, args[0]);
-    const dbi = try utils.parseDatabase(env, args[1], txn_ptr);
+    const dbi = try utils.parseDatabase(env, args[1], txn_ptr.*);
 
     const cursor_ptr = try allocator.create(lmdb.Cursor);
     cursor_ptr.* = try lmdb.Cursor.open(txn_ptr.*, dbi);

@@ -31,14 +31,14 @@ pub const methods = [_]n.Method{
 pub const argc = 2;
 
 /// `new Tree(txn, dbi)`
-pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
+pub fn create(env: c.napi_env, this: c.napi_value, args: *const [argc]c.napi_value) !c.napi_value {
     const txn_ptr = try n.unwrap(lmdb.Transaction, &Transaction.TypeTag, env, args[0]);
-    const dbi = try utils.parseDatabase(env, args[1], txn_ptr);
+    const dbi = try utils.parseDatabase(env, args[1], txn_ptr.*);
 
     const tree_ptr = try allocator.create(okra.Tree);
-    tree_ptr.* = try okra.Tree.open(allocator, txn_ptr.*, .{ .dbi = dbi });
-    try n.wrap(okra.Tree, env, this, tree_ptr, destroy, &TypeTag);
+    tree_ptr.* = try okra.Tree.open(allocator, txn_ptr.*, dbi, .{});
 
+    try n.wrap(okra.Tree, env, this, tree_ptr, destroy, &TypeTag);
     return null;
 }
 

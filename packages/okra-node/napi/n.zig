@@ -139,37 +139,41 @@ pub fn parseUint32(env: c.napi_env, value: c.napi_value) Error!u32 {
     };
 }
 
-pub fn parseStringAlloc(env: c.napi_env, value: c.napi_value, allocator: std.mem.Allocator) ![:0]const u8 {
-    var length: usize = 0;
-    try switch (c.napi_get_value_string_utf8(env, value, null, 0, &length)) {
+/// TODO: this needs some investigation... will they let us copy without a null terminator?
+// pub fn copyString(allocator: std.mem.Allocator, env: c.napi_env, value: c.napi_value) ![]u8 {
+//     var length: usize = 0;
+//     try switch (c.napi_get_value_string_utf8(env, value, null, 0, &length)) {
+//         c.napi_ok => {},
+//         c.napi_string_expected => throwTypeError(env, "expected a string"),
+//         else => throwError(env, "failed to get string length"),
+//     };
+
+//     const buffer = try allocator.alloc(u8, length);
+//     try switch (c.napi_get_value_string_utf8(env, value, buffer.ptr, buffer.len, &length)) {
+//         c.napi_ok => {},
+//         c.napi_string_expected => throwTypeError(env, "expected a string"),
+//         else => throwError(env, "failed to get string value"),
+//     };
+
+//     return buffer;
+// }
+
+pub fn copyStringZ(allocator: std.mem.Allocator, env: c.napi_env, value: c.napi_value) ![:0]u8 {
+    var len: usize = 0;
+    try switch (c.napi_get_value_string_utf8(env, value, null, 0, &len)) {
         c.napi_ok => {},
         c.napi_string_expected => throwTypeError(env, "expected a string"),
         else => throwError(env, "failed to get string length"),
     };
 
-    const buffer = try allocator.alloc(u8, length + 1);
-    try switch (c.napi_get_value_string_utf8(env, value, buffer.ptr, buffer.len, &length)) {
+    const buffer = try allocator.alloc(u8, len + 1);
+    try switch (c.napi_get_value_string_utf8(env, value, buffer.ptr, buffer.len, &len)) {
         c.napi_ok => {},
         c.napi_string_expected => throwTypeError(env, "expected a string"),
         else => throwError(env, "failed to get string value"),
     };
 
-    return buffer[0..length :0];
-}
-
-pub fn parseBuffer(env: c.napi_env, value: c.napi_value) Error![]const u8 {
-    var length: usize = 0;
-    var ptr: ?*anyopaque = undefined;
-    var is_buffer = false;
-    if (c.napi_is_buffer(env, value, &is_buffer) != c.napi_ok) {
-        return throwError(env, "failed to check buffer type");
-    } else if (!is_buffer) {
-        return throwTypeError(env, "expected a NodeJS Buffer");
-    } else if (c.napi_get_buffer_info(env, value, &ptr, &length) != c.napi_ok) {
-        return throwError(env, "failed to get buffer info");
-    }
-
-    return @as([*]const u8, @ptrCast(ptr))[0..length];
+    return buffer[0..len :0];
 }
 
 fn getArrayType(comptime T: type) c.napi_typedarray_type {
@@ -217,14 +221,6 @@ pub fn createUint32(env: c.napi_env, value: u32) Error!c.napi_value {
     return switch (c.napi_create_uint32(env, value, &result)) {
         c.napi_ok => result,
         else => throwError(env, "failed to create unsigned integer"),
-    };
-}
-
-pub fn createBuffer(env: c.napi_env, value: []const u8) Error!c.napi_value {
-    var result: c.napi_value = undefined;
-    return switch (c.napi_create_buffer_copy(env, value.len, value.ptr, null, &result)) {
-        c.napi_ok => result,
-        else => throwError(env, "failed to create buffer"),
     };
 }
 
