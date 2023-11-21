@@ -26,27 +26,27 @@ type Node = { level: number; key: Key; hash: Uint8Array; value?: Uint8Array }
 type Bound<T> = { key: T; inclusive: boolean }
 
 declare class MemoryTree {
-	static open(options?: { K?: number; Q?: number }): Promise<MemoryTree>
+  static open(options?: { K?: number; Q?: number }): Promise<MemoryTree>
 
-	public get(key: Uint8Array): Promise<Uint8Array | null>
-	public set(key: Uint8Array, value: Uint8Array): Promise<void>
-	public delete(key: Uint8Array): Promise<void>
+  public get(key: Uint8Array): Promise<Uint8Array | null>
+  public set(key: Uint8Array, value: Uint8Array): Promise<void>
+  public delete(key: Uint8Array): Promise<void>
 
-	public entries(
-		lowerBound?: Bound<Uint8Array> | null,
-		upperBound?: Bound<Uint8Array> | null,
-		options: { reverse?: boolean }
-	): AsyncGenerator<[Uint8Array, Uint8Array]>
+  public entries(
+    lowerBound?: Bound<Uint8Array> | null,
+    upperBound?: Bound<Uint8Array> | null,
+    options: { reverse?: boolean }
+  ): AsyncGenerator<[Uint8Array, Uint8Array]>
 
-	public getRoot(): Promise<Node>
-	public getNode(level: number, key: Key): Promise<Node | null>
-	public getChildren(level: number, key: Key): Promise<Node[]>
+  public getRoot(): Promise<Node>
+  public getNode(level: number, key: Key): Promise<Node | null>
+  public getChildren(level: number, key: Key): Promise<Node[]>
 
-	public nodes(
-		level: number,
-		lowerBound?: Bound<Key> | null,
-		upperBound?: Bound<Key> | null,
-		options: { reverse?: boolean }
-	): AsyncGenerator<Node>
+  public nodes(
+    level: number,
+    lowerBound?: Bound<Key> | null,
+    upperBound?: Bound<Key> | null,
+    options: { reverse?: boolean }
+  ): AsyncGenerator<Node>
 }
 ```

@@ -43,16 +43,16 @@ Okra is designed as a thin wrapper around an abstract key/value store interface.
 
 ```ts
 interface KeyValueStore {
-	get(key: Uint8Array): Promise<Uint8Array | null>
-	set(key: Uint8Array, value: Uint8Array): Promise<void>
-	delete(key: Uint8Array): Promise<void>
-	entries(range?: KeyRange): AsyncIterableIterator<[Uint8Array, Uint8Array]>
+  get(key: Uint8Array): Promise<Uint8Array | null>
+  set(key: Uint8Array, value: Uint8Array): Promise<void>
+  delete(key: Uint8Array): Promise<void>
+  entries(range?: KeyRange): AsyncIterableIterator<[Uint8Array, Uint8Array]>
 }
 
 type KeyRange = {
-	reverse?: boolean
-	lowerBound?: { key: Uint8Array; inclusive: boolean }
-	upperBound?: { key: Uint8Array; inclusive: boolean }
+  reverse?: boolean
+  lowerBound?: { key: Uint8Array; inclusive: boolean }
+  upperBound?: { key: Uint8Array; inclusive: boolean }
 }
 ```
 
@@ -82,12 +82,12 @@ If you want to use Okra with your own key/value store, extend the Tree class and
 import { Tree } from "@canvas-js/okra"
 
 class MyCustomTree extends Tree {
-	public static async open() {
-		const store = new MyCustomKeyValueStore()
-		const tree = new MyCustomTree(store)
-		await tree.initialize()
-		return tree
-	}
+  public static async open() {
+    const store = new MyCustomKeyValueStore()
+    const tree = new MyCustomTree(store)
+    await tree.initialize()
+    return tree
+  }
 }
 
 const tree = await MyCustomTree.open()
@@ -145,10 +145,10 @@ await collect(tree.entries({ reverse: true }))
 // ]
 
 await collect(
-	tree.entries({
-		lowerBound: { key: encoder.encode("b"), inclusive: true },
-		upperBound: { key: encoder.encode("c"), inclusive: false },
-	})
+  tree.entries({
+    lowerBound: { key: encoder.encode("b"), inclusive: true },
+    upperBound: { key: encoder.encode("c"), inclusive: false },
+  })
 )
 // [
 //	 [ <Buffer 62>, <Buffer 62 61 72> ]
@@ -199,9 +199,9 @@ First, you must have an instance of the `Source` interface for the remote Okra d
 
 ```ts
 export interface Source {
-	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
-	getChildren(level: number, key: Key): Promise<Node[]>
+  getRoot(): Promise<Node>
+  getNode(level: number, key: Key): Promise<Node | null>
+  getChildren(level: number, key: Key): Promise<Node[]>
 }
 ```
 
@@ -218,9 +218,9 @@ const target = await MemoryTree.open()
 
 // initialize them with the same 256 random entries
 for (let i = 0; i < 256; i++) {
-	const key = new Uint8Array([i])
-	await source.set(key, sha256(key))
-	await target.set(key, sha256(key))
+  const key = new Uint8Array([i])
+  await source.set(key, sha256(key))
+  await target.set(key, sha256(key))
 }
 
 // delete one entry from source
@@ -274,17 +274,17 @@ Calling `sync(source, target)` does not automatically modify `target` - it only 
 import { sync } from "@canvas-js/okra"
 
 async function pull(source: Source, target: Tree): Promise<void> {
-	for await (const delta of sync(source, target)) {
-		if (delta.source === null) {
-			continue
-		} else if (delta.target === null) {
-			await target.set(delta.key, delta.source)
-			// do more stuff to process the new value
-			// ...
-		} else {
-			throw new Error(`Conflict at key ${hex(delta.key)}`)
-		}
-	}
+  for await (const delta of sync(source, target)) {
+    if (delta.source === null) {
+      continue
+    } else if (delta.target === null) {
+      await target.set(delta.key, delta.source)
+      // do more stuff to process the new value
+      // ...
+    } else {
+      throw new Error(`Conflict at key ${hex(delta.key)}`)
+    }
+  }
 }
 ```
 
@@ -298,13 +298,13 @@ One way of looking at `pull` is that it implements a grow-only set with an effic
 import { sync } from "@canvas-js/okra"
 
 async function copy(source: Source, target: Tree): Promise<void> {
-	for await (const delta of sync(source, target)) {
-		if (delta.source === null) {
-			await target.delete(delta.key)
-		} else {
-			await target.set(delta.key, delta.source)
-		}
-	}
+  for await (const delta of sync(source, target)) {
+    if (delta.source === null) {
+      await target.delete(delta.key)
+    } else {
+      await target.set(delta.key, delta.source)
+    }
+  }
 }
 ```
 
@@ -316,20 +316,20 @@ Call `copy(source, tree)` to _copy the remote source_, deleting any local entrie
 import { sync } from "@canvas-js/okra"
 
 async function merge(
-	source: Source,
-	target: Tree,
-	resolve: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
+  source: Source,
+  target: Tree,
+  resolve: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
 ): Promise<void> {
-	for await (const delta of sync(source, target)) {
-		if (delta.source === null) {
-			continue
-		} else if (delta.target === null) {
-			await target.set(delta.key, delta.source)
-		} else {
-			const value = await resolve(delta.key, delta.source, delta.target)
-			await target.set(delta.key, value)
-		}
-	}
+  for await (const delta of sync(source, target)) {
+    if (delta.source === null) {
+      continue
+    } else if (delta.target === null) {
+      await target.set(delta.key, delta.source)
+    } else {
+      const value = await resolve(delta.key, delta.source, delta.target)
+      await target.set(delta.key, value)
+    }
+  }
 }
 ```
 
@@ -361,8 +361,8 @@ console.log(await text(tree.print())) // hash size defaults to 4 bytes for reada
 
 const bigTree = await Tree.open(new MemoryStore())
 for (let i = 0; i < 256; i++) {
-	const key = new Uint8Array([i])
-	await bigTree.set(key, sha256(key))
+  const key = new Uint8Array([i])
+  await bigTree.set(key, sha256(key))
 }
 
 console.log(await text(bigTree.print()))
@@ -398,71 +398,71 @@ type Key = Uint8Array | null
 // value is undefined for level > 0 || key === null,
 // and a Uint8Array for level === 0 && key !== null.
 type Node = {
-	level: number
-	key: Key
-	hash: Uint8Array
-	value?: Uint8Array
+  level: number
+  key: Key
+  hash: Uint8Array
+  value?: Uint8Array
 }
 
 // source and target are never both null.
 type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
 
 interface Source {
-	getRoot(): Promise<Node>
-	getNode(level: number, key: Key): Promise<Node | null>
-	getChildren(level: number, key: Key): Promise<Node[]>
+  getRoot(): Promise<Node>
+  getNode(level: number, key: Key): Promise<Node | null>
+  getChildren(level: number, key: Key): Promise<Node[]>
 }
 
 type Bound<K> = { key: K; inclusive: boolean }
 
 interface Target extends Source {
-	nodes(
-		level: number,
-		lowerBound?: Bound<Key> | null,
-		upperBound?: Bound<Key> | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<Node>
+  nodes(
+    level: number,
+    lowerBound?: Bound<Key> | null,
+    upperBound?: Bound<Key> | null,
+    options?: { reverse?: boolean }
+  ): AsyncIterableIterator<Node>
 }
 
 interface KeyValueStore {
-	get(key: Uint8Array): Awaitable<Uint8Array | null>
-	set(key: Uint8Array, value: Uint8Array): Awaitable<void>
-	delete(key: Uint8Array): Awaitable<void>
-	entries(
-		lowerBound?: Bound<Uint8Array> | null,
-		upperBound?: Bound<Uint8Array> | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<[Uint8Array, Uint8Array]>
+  get(key: Uint8Array): Awaitable<Uint8Array | null>
+  set(key: Uint8Array, value: Uint8Array): Awaitable<void>
+  delete(key: Uint8Array): Awaitable<void>
+  entries(
+    lowerBound?: Bound<Uint8Array> | null,
+    upperBound?: Bound<Uint8Array> | null,
+    options?: { reverse?: boolean }
+  ): AsyncIterableIterator<[Uint8Array, Uint8Array]>
 }
 
 declare class Tree implements KeyValueStore, Source, Target {
-	protected constructor(store: KeyValueStore, options?: { K?: number; Q?: number })
+  protected constructor(store: KeyValueStore, options?: { K?: number; Q?: number })
 
-	// closes the underlying store
-	public close(): Promise<void>
+  // closes the underlying store
+  public close(): Promise<void>
 
-	// external key/value interface
-	public get(key: Uint8Array): Promise<Uint8Array | null>
-	public set(key: Uint8Array, value: Uint8Array): Promise<void>
-	public delete(key: Uint8Array): Promise<void>
-	public entries(range?: KeyRange): AsyncIterableIterator<[key: Uint8Array, value: Uint8Array]>
+  // external key/value interface
+  public get(key: Uint8Array): Promise<Uint8Array | null>
+  public set(key: Uint8Array, value: Uint8Array): Promise<void>
+  public delete(key: Uint8Array): Promise<void>
+  public entries(range?: KeyRange): AsyncIterableIterator<[key: Uint8Array, value: Uint8Array]>
 
-	// access internal merkle tree nodes
-	public getRoot(): Promise<Node>
-	public getNode(level: number, key: Key): Promise<Node | null>
-	public getChildren(level: number, key: Key): Promise<Node[]>
+  // access internal merkle tree nodes
+  public getRoot(): Promise<Node>
+  public getNode(level: number, key: Key): Promise<Node | null>
+  public getChildren(level: number, key: Key): Promise<Node[]>
 
-	/**
-	 * Raze and rebuild the merkle tree from the leaves.
-	 * @returns the new root node
-	 */
-	public rebuild(): Promise<void>
+  /**
+   * Raze and rebuild the merkle tree from the leaves.
+   * @returns the new root node
+   */
+  public rebuild(): Promise<void>
 
-	/**
-	 * Pretty-print the tree structure to a utf-8 stream.
-	 * Consume with a TextDecoderStream or async iterable sink.
-	 */
-	public async *print(): AsyncIterableIterator<Uint8Array>
+  /**
+   * Pretty-print the tree structure to a utf-8 stream.
+   * Consume with a TextDecoderStream or async iterable sink.
+   */
+  public async *print(): AsyncIterableIterator<Uint8Array>
 }
 ```
 

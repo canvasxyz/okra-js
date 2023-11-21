@@ -28,11 +28,11 @@ await source.set(hex("02"), hex("cc"))
 await target.set(hex("02"), hex("dd"))
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
-	const values = []
-	for await (const value of iter) {
-		values.push(value)
-	}
-	return values
+  const values = []
+  for await (const value of iter) {
+    values.push(value)
+  }
+  return values
 }
 
 const delta = await collect(sync(source, target))
