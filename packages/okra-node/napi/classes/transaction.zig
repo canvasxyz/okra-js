@@ -107,7 +107,10 @@ pub fn delete(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value)
     const dbi = try utils.parseDatabase(env, args[0], txn_ptr.*);
     const key = try n.parseTypedArray(u8, env, args[1]);
 
-    try txn_ptr.delete(dbi, key);
+    txn_ptr.delete(dbi, key) catch |err| switch (err) {
+        error.MDB_NOTFOUND => {},
+        else => return err,
+    };
 
     return null;
 }

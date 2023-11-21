@@ -1,14 +1,27 @@
-import * as okra from "./okra.js"
+import { Bound, Entry, Key, Node, assert } from "@canvas-js/okra"
 
-export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
-	public readonly dbi: number
+import type { DatabaseID, Awaitable, DatabaseName } from "./types.js"
+import * as okra from "./okra.js"
+import { Transaction } from "./Transaction.js"
+
+export class Tree extends okra.Tree {
+	public static async open<T>(
+		txn: Transaction,
+		dbi: DatabaseID | DatabaseName,
+		callback: (tree: Tree) => Awaitable<T>
+	) {
+		const tree = new Tree(txn, typeof dbi === "number" ? dbi : txn.openDatabase(dbi))
+		try {
+			return await callback(tree)
+		} finally {
+			tree.close()
+		}
+	}
 
 	#open = true
 
-	public constructor(public readonly txn: Transaction, options: TreeOptions = {}) {
-		const dbi = typeof options.dbi === "number" ? options.dbi : txn.openDatabase(options.dbi ?? null)
+	private constructor(public readonly txn: Transaction, public readonly dbi: DatabaseID) {
 		super(txn, dbi)
-		this.dbi = dbi
 	}
 
 	public close() {
@@ -16,22 +29,8 @@ export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
 			super.close()
 			this.#open = false
 		} else {
-			throw new Error("tree closed")
+			throw new Error("Tree closed")
 		}
-	}
-
-	// KeyValueStore methods
-
-	public get(key: Uint8Array): Uint8Array | null {
-		return super.get(key)
-	}
-
-	public set(key: Uint8Array, value: Uint8Array) {
-		super.set(key, value)
-	}
-
-	public delete(key: Uint8Array) {
-		super.delete(key)
 	}
 
 	public async *entries(
@@ -46,27 +45,14 @@ export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
 		}
 	}
 
-	// Source & Target methods
-
-	public getRoot(): Node {
-		return super.getRoot()
-	}
-
-	public getNode(level: number, key: Key): Node | null {
-		return super.getNode(level, key)
-	}
-
-	public getChildren(level: number, key: Key): Node[] {
-		return super.getChildren(level, key)
-	}
-
 	public async *nodes(
 		level: number,
 		lowerBound: Bound<Key> | null = null,
 		upperBound: Bound<Key> | null = null,
 		options: { reverse?: boolean } = {}
 	): AsyncIterableIterator<Node> {
-		const iter = new Iterator(this.txn, this.dbi, level, lowerBound, upperBound, options)
+		const reverse = options.reverse ?? false
+		const iter = new okra.Iterator(this.txn, this.dbi, level, lowerBound, upperBound, reverse)
 		try {
 			for (let node = iter.next(); node !== null; node = iter.next()) {
 				yield node

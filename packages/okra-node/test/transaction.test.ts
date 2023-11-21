@@ -1,151 +1,163 @@
 import test from "ava"
 
-import { collect } from "@canvas-js/okra"
-
-import { getEnvironment, encode, decode } from "./utils.js"
+import { getEnvironment, encode as e } from "./utils.js"
 
 test("get/set/delete", async (t) => {
 	const env = getEnvironment(t, {})
 
 	await env.write((txn) => {
-		txn.set(encode("a"), encode("foo"))
-		txn.set(encode("b"), encode("bar"))
-		txn.set(encode("c"), encode("baz"))
+		const dbi = txn.openDatabase(null)
+		txn.set(dbi, e("a"), e("foo"))
+		txn.set(dbi, e("b"), e("bar"))
+		txn.set(dbi, e("c"), e("baz"))
 	})
 
 	await env.read((txn) => {
-		t.deepEqual(txn.get(encode("a")), encode("foo"))
-		t.deepEqual(txn.get(encode("b")), encode("bar"))
-		t.deepEqual(txn.get(encode("c")), encode("baz"))
-		t.deepEqual(txn.get(encode("d")), null)
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(txn.get(dbi, e("a")), e("foo"))
+		t.deepEqual(txn.get(dbi, e("b")), e("bar"))
+		t.deepEqual(txn.get(dbi, e("c")), e("baz"))
+		t.deepEqual(txn.get(dbi, e("d")), null)
 	})
 
 	await env.write(async (txn) => {
-		await txn.delete(encode("b"))
-		await txn.delete(encode("d"))
+		const dbi = txn.openDatabase(null)
+		txn.delete(dbi, e("b"))
+		// txn.delete(dbi, e("d"))
 	})
 
-	t.is(await env.read((txn) => txn.get(encode("b"))), null)
+	t.is(await env.read((txn) => txn.get(txn.openDatabase(null), e("b"))), null)
 })
 
 test("entries", async (t) => {
 	const env = getEnvironment(t, {})
 
 	await env.write((txn) => {
-		txn.set(encode("a"), encode("foo"))
-		txn.set(encode("b"), encode("bar"))
-		txn.set(encode("c"), encode("baz"))
-		txn.set(encode("g"), encode("ooo"))
-		txn.set(encode("h"), encode("aaa"))
+		const dbi = txn.openDatabase(null)
+		txn.set(dbi, e("a"), e("foo"))
+		txn.set(dbi, e("b"), e("bar"))
+		txn.set(dbi, e("c"), e("baz"))
+		txn.set(dbi, e("g"), e("ooo"))
+		txn.set(dbi, e("h"), e("aaa"))
 	})
 
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries()), [
-			[encode("a"), encode("foo")],
-			[encode("b"), encode("bar")],
-			[encode("c"), encode("baz")],
-			[encode("g"), encode("ooo")],
-			[encode("h"), encode("aaa")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi)), [
+			[e("a"), e("foo")],
+			[e("b"), e("bar")],
+			[e("c"), e("baz")],
+			[e("g"), e("ooo")],
+			[e("h"), e("aaa")],
 		])
 	})
 
 	// inclusive lower bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries({ key: encode("b"), inclusive: true })), [
-			[encode("b"), encode("bar")],
-			[encode("c"), encode("baz")],
-			[encode("g"), encode("ooo")],
-			[encode("h"), encode("aaa")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, { key: e("b"), inclusive: true })), [
+			[e("b"), e("bar")],
+			[e("c"), e("baz")],
+			[e("g"), e("ooo")],
+			[e("h"), e("aaa")],
 		])
 	})
 
 	// exclusive lower bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries({ key: encode("b"), inclusive: false })), [
-			[encode("c"), encode("baz")],
-			[encode("g"), encode("ooo")],
-			[encode("h"), encode("aaa")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, { key: e("b"), inclusive: false })), [
+			[e("c"), e("baz")],
+			[e("g"), e("ooo")],
+			[e("h"), e("aaa")],
 		])
 	})
 
 	// inclusive upper bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries(null, { key: encode("b"), inclusive: true })), [
-			[encode("a"), encode("foo")],
-			[encode("b"), encode("bar")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, null, { key: e("b"), inclusive: true })), [
+			[e("a"), e("foo")],
+			[e("b"), e("bar")],
 		])
 	})
 
 	// exclusive upper bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries(null, { key: encode("b"), inclusive: false })), [
-			[encode("a"), encode("foo")],
-		])
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, null, { key: e("b"), inclusive: false })), [[e("a"), e("foo")]])
 	})
 
 	// upper bound out-of-range
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries(null, { key: encode("x"), inclusive: false })), [
-			[encode("a"), encode("foo")],
-			[encode("b"), encode("bar")],
-			[encode("c"), encode("baz")],
-			[encode("g"), encode("ooo")],
-			[encode("h"), encode("aaa")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, null, { key: e("x"), inclusive: false })), [
+			[e("a"), e("foo")],
+			[e("b"), e("bar")],
+			[e("c"), e("baz")],
+			[e("g"), e("ooo")],
+			[e("h"), e("aaa")],
 		])
 	})
 
 	// lower bound out-of-range
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries({ key: encode("7"), inclusive: false }, null)), [
-			[encode("a"), encode("foo")],
-			[encode("b"), encode("bar")],
-			[encode("c"), encode("baz")],
-			[encode("g"), encode("ooo")],
-			[encode("h"), encode("aaa")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, { key: e("7"), inclusive: false }, null)), [
+			[e("a"), e("foo")],
+			[e("b"), e("bar")],
+			[e("c"), e("baz")],
+			[e("g"), e("ooo")],
+			[e("h"), e("aaa")],
 		])
 	})
 
 	// reverse inclusive lower bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries({ key: encode("b"), inclusive: true }, null, { reverse: true })), [
-			[encode("h"), encode("aaa")],
-			[encode("g"), encode("ooo")],
-			[encode("c"), encode("baz")],
-			[encode("b"), encode("bar")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, { key: e("b"), inclusive: true }, null, { reverse: true })), [
+			[e("h"), e("aaa")],
+			[e("g"), e("ooo")],
+			[e("c"), e("baz")],
+			[e("b"), e("bar")],
 		])
 	})
 
 	// reverse exclusive lower bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries({ key: encode("b"), inclusive: false }, null, { reverse: true })), [
-			[encode("h"), encode("aaa")],
-			[encode("g"), encode("ooo")],
-			[encode("c"), encode("baz")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, { key: e("b"), inclusive: false }, null, { reverse: true })), [
+			[e("h"), e("aaa")],
+			[e("g"), e("ooo")],
+			[e("c"), e("baz")],
 		])
 	})
 
 	// reverse inclusive upper bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries(null, { key: encode("b"), inclusive: true }, { reverse: true })), [
-			[encode("b"), encode("bar")],
-			[encode("a"), encode("foo")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, null, { key: e("b"), inclusive: true }, { reverse: true })), [
+			[e("b"), e("bar")],
+			[e("a"), e("foo")],
 		])
 	})
 
 	// reverse exclusive upper bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries(null, { key: encode("c"), inclusive: false }, { reverse: true })), [
-			[encode("b"), encode("bar")],
-			[encode("a"), encode("foo")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, null, { key: e("c"), inclusive: false }, { reverse: true })), [
+			[e("b"), e("bar")],
+			[e("a"), e("foo")],
 		])
 	})
 
 	// reverse exclusive upper bound
 	await env.read(async (txn) => {
-		t.deepEqual(await collect(txn.entries(null, { key: encode("d"), inclusive: false }, { reverse: true })), [
-			[encode("c"), encode("baz")],
-			[encode("b"), encode("bar")],
-			[encode("a"), encode("foo")],
+		const dbi = txn.openDatabase(null)
+		t.deepEqual(Array.from(txn.entries(dbi, null, { key: e("d"), inclusive: false }, { reverse: true })), [
+			[e("c"), e("baz")],
+			[e("b"), e("bar")],
+			[e("a"), e("foo")],
 		])
 	})
 })

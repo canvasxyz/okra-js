@@ -2,19 +2,34 @@ import test, { ExecutionContext } from "ava"
 import { Entry } from "@canvas-js/okra"
 import { MemoryTree } from "@canvas-js/okra-memory"
 
+import { Tree } from "@canvas-js/okra-node"
 import { compareEntries, map, random, getEnvironment } from "./utils.js"
+
+async function* toAsync<T>(iter: Iterable<T>): AsyncIterable<T> {
+	for (const value of iter) {
+		yield value
+	}
+}
 
 async function compare(t: ExecutionContext, entries: Iterable<Entry>) {
 	const memoryTree = await MemoryTree.open()
 	const env = getEnvironment(t)
-	await env.writeTree(async (tree) => {
-		for (const [key, value] of entries) {
-			tree.set(key, value)
-			await memoryTree.set(key, value)
-		}
-	})
 
-	t.is(await env.read((txn) => compareEntries(t, txn.entries(), memoryTree.store.entries())), 0)
+	await env.write((txn) =>
+		Tree.open(txn, null, async (tree) => {
+			for (const [key, value] of entries) {
+				tree.set(key, value)
+				await memoryTree.set(key, value)
+			}
+		})
+	)
+
+	t.is(
+		await env.read((txn) =>
+			compareEntries(t, toAsync(txn.entries(txn.openDatabase(null))), memoryTree.store.entries())
+		),
+		0
+	)
 }
 
 test("cross-reference a tree with 3 static entries", async (t) => {
@@ -50,4 +65,4 @@ test("cross-reference a tree with 5000 random entries", async (t) => {
 	await compare(t, entries)
 })
 
-// TODO: instantiate a JavaScript Tree implementation using the Zig LMDB bindings
+// TODO: instantiate a JavaScript Tree implementation using the Zig LMDB bindings?

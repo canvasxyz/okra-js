@@ -2,14 +2,13 @@ import { equals } from "uint8arrays"
 
 import { Bound, Entry, lessThan } from "@canvas-js/okra"
 
-import type { DatabaseID, DatabaseName } from "./types.js"
+import type { DatabaseID } from "./types.js"
 import { Cursor } from "./Cursor.js"
 import * as okra from "./okra.js"
 
 export interface TransactionOptions {
 	readOnly?: boolean
 	parent?: Transaction
-	dbi?: DatabaseName | DatabaseID
 }
 
 export class Transaction extends okra.Transaction {

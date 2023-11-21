@@ -1,6 +1,7 @@
 import test, { ExecutionContext } from "ava"
 
 import { Delta, KeyValueStore, collect, sync } from "@canvas-js/okra"
+import { Tree } from "@canvas-js/okra-node"
 
 import { getKey, defaultValue, random, initialize, iota, getEnvironment } from "./utils.js"
 
@@ -62,21 +63,43 @@ async function testDeltaNode(
 	deleteSource: number,
 	deleteTarget: number
 ): Promise<void> {
-	const [source, target] = [getEnvironment(t), getEnvironment(t)]
-	const expected = await source.writeTree(async (sourceTxn) => {
-		return await target.writeTree(async (targetTxn) => {
-			for (const [key, value] of iota(count)) {
-				sourceTxn.set(key, value)
-				targetTxn.set(key, value)
-			}
+	const [sourceEnv, targetEnv] = [getEnvironment(t), getEnvironment(t)]
 
-			return await initializeDelta(sourceTxn, targetTxn, seed, count, deleteSource, deleteTarget)
+	const expected = await sourceEnv.write((sourceTxn) =>
+		Tree.open(sourceTxn, null, async (source) => {
+			return await targetEnv.write((targetTxn) =>
+				Tree.open(targetTxn, null, async (target) => {
+					for (const [key, value] of iota(count)) {
+						source.set(key, value)
+						target.set(key, value)
+					}
+
+					return await initializeDelta(source, target, seed, count, deleteSource, deleteTarget)
+				})
+			)
 		})
-	})
-
-	const actual = await source.readTree((sourceTxn) =>
-		target.readTree((targetTxn) => collect(sync(sourceTxn, targetTxn)))
 	)
+
+	// const expected = await source.writeTree(async (sourceTxn) => {
+	// 	return await target.writeTree(async (targetTxn) => {
+	// 		for (const [key, value] of iota(count)) {
+	// 			sourceTxn.set(key, value)
+	// 			targetTxn.set(key, value)
+	// 		}
+
+	// 		return await initializeDelta(sourceTxn, targetTxn, seed, count, deleteSource, deleteTarget)
+	// 	})
+	// })
+
+	const actual = await sourceEnv.read((sourceTxn) =>
+		Tree.open(sourceTxn, null, (source) =>
+			targetEnv.read((targetTxn) => Tree.open(targetTxn, null, (target) => collect(sync(source, target))))
+		)
+	)
+
+	// const actual = await source.readTree((sourceTxn) =>
+	// 	target.readTree((targetTxn) => collect(sync(sourceTxn, targetTxn)))
+	// )
 
 	t.deepEqual(actual, expected)
 }
