@@ -8,7 +8,10 @@ export class IDBStore implements KeyValueStore {
 	private readonly log = debug("okra-idb:store")
 
 	public txn: IDBPTransaction<unknown, [string], IDBTransactionMode> | null = null
-	public constructor(public readonly db: IDBPDatabase, public readonly storeName: string) {}
+	public constructor(
+		public readonly db: IDBPDatabase,
+		public readonly storeName: string,
+	) {}
 
 	public async write<T>(callback: () => Promise<T>) {
 		this.txn = this.db.transaction(this.storeName, "readwrite")
@@ -76,7 +79,7 @@ export class IDBStore implements KeyValueStore {
 	async *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		{ reverse = false }: { reverse?: boolean } = {}
+		{ reverse = false }: { reverse?: boolean } = {},
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		let query: IDBKeyRange | null = null
 		if (lowerBound && upperBound) {
@@ -89,7 +92,7 @@ export class IDBStore implements KeyValueStore {
 
 		assert(this.txn !== null, "Internal error: this.txn !== null")
 		const store = this.txn.objectStore(this.storeName)
-		let cursor = await store.openCursor(query, reverse ? "prevunique" : "nextunique")
+		let cursor = await store.openCursor(query, reverse ? "prev" : "next")
 
 		while (cursor !== null) {
 			let key: Uint8Array | null = null
