@@ -1,53 +1,37 @@
 import test from "ava"
 
-import { hexToBytes as hex } from "@noble/hashes/utils"
-
-import { getEnvironment } from "./utils.js"
-
-const encoder = new TextEncoder()
-const encode = (value: string) => encoder.encode(value)
+import { getEnvironment, encode as e } from "./utils.js"
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 test("open a write txn during an open read txn", async (t) => {
 	const env = getEnvironment(t)
-	await env.writeTree(() => {})
-	await env.readTree(async (treeA) => {
-		const rootB = await env.writeTree(async (treeB) => {
-			await wait(100)
-			treeB.set(encode("a"), encode("foo"))
-			treeB.set(encode("b"), encode("bar"))
-			treeB.set(encode("c"), encode("baz"))
-			return treeB.getRoot()
+	await env.read(async (txnA) => {
+		const dbiA = txnA.openDatabase(null)
+		await env.write(async (txnB) => {
+			const dbiB = txnB.openDatabase(null)
+			await wait(300)
+
+			txnB.set(dbiB, e("a"), e("foo"))
+			txnB.set(dbiB, e("b"), e("bar"))
+			txnB.set(dbiB, e("c"), e("baz"))
 		})
 
-		t.deepEqual(rootB, {
-			level: 1,
-			key: null,
-			hash: hex("6246b94074d09feb644be1a1c12c1f50"),
-		})
-
-		t.deepEqual(treeA.getRoot(), {
-			level: 0,
-			key: null,
-			hash: hex("af1349b9f5f9a1a6a0404dea36dcc949"),
-		})
-
-		t.deepEqual(await env.readTree((treeC) => treeC.getRoot()), rootB)
+		t.is(txnA.get(dbiA, e("a")), null)
+		t.deepEqual(await env.read((txnC) => txnC.get(txnC.openDatabase(null), e("a"))), e("foo"))
 	})
 })
 
 test("open concurrent writes", async (t) => {
 	const env = getEnvironment(t)
-	await env.writeTree(() => {})
 
 	let index = 0
 	const order = await Promise.all([
-		env.writeTree(async (tree) => {
+		env.write(async (txn) => {
 			await wait(500)
 			return index++
 		}),
-		env.writeTree(async (tree) => {
+		env.write(async (txn) => {
 			await wait(500)
 			return index++
 		}),
@@ -58,27 +42,26 @@ test("open concurrent writes", async (t) => {
 
 test("open lots of concurrent writes", async (t) => {
 	const env = getEnvironment(t)
-	await env.writeTree(() => {})
 
 	let index = 0
 	const order = await Promise.all([
-		env.writeTree(async (txn) => {
+		env.write(async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		env.write(async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		env.write(async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		env.write(async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		env.write(async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),

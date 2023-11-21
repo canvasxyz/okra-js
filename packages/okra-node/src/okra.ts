@@ -65,8 +65,8 @@ module okra {
 			txn: Transaction,
 			dbi: number,
 			level: number,
-			lowerBound: Bound<Key>,
-			upperBound: Bound<Key>,
+			lowerBound: Bound<Key> | null,
+			upperBound: Bound<Key> | null,
 			reverse: boolean
 		)
 

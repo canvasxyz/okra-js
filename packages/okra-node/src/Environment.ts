@@ -1,6 +1,6 @@
 import PQueue from "p-queue"
 
-import type { DatabaseID, DatabaseName, Awaitable } from "./types.js"
+import type { Awaitable } from "./types.js"
 import { Transaction } from "./Transaction.js"
 import * as okra from "./okra.js"
 
@@ -41,20 +41,6 @@ export class Environment extends okra.Environment {
 		}
 	}
 
-	// public readTree<T>(
-	// 	callback: (tree: Tree) => Awaitable<T>,
-	// 	options: { dbi?: DatabaseName | DatabaseID } = {}
-	// ): Promise<T> {
-	// 	return this.read(async (txn) => {
-	// 		const tree = new Tree(txn, options)
-	// 		try {
-	// 			return await callback(tree)
-	// 		} finally {
-	// 			tree.close()
-	// 		}
-	// 	})
-	// }
-
 	public async write<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T> {
 		let result: T | null = null
 		await this.#queue.add(async () => {
@@ -70,18 +56,4 @@ export class Environment extends okra.Environment {
 
 		return result!
 	}
-
-	// public writeTree<T>(
-	// 	callback: (tree: Tree) => Awaitable<T>,
-	// 	options: { dbi?: DatabaseName | DatabaseID } = {}
-	// ): Promise<T> {
-	// 	return this.write(async (txn) => {
-	// 		const tree = new Tree(txn, options)
-	// 		try {
-	// 			return await callback(tree)
-	// 		} finally {
-	// 			tree.close()
-	// 		}
-	// 	})
-	// }
 }
