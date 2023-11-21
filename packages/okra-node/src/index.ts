@@ -379,7 +379,7 @@ export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
 		upperBound: Bound<Key> | null = null,
 		options: { reverse?: boolean } = {}
 	): AsyncIterableIterator<Node> {
-		const iter = new Iterator(this, level, lowerBound, upperBound, options)
+		const iter = new Iterator(this.txn, this.dbi, level, lowerBound, upperBound, options)
 		try {
 			for (let node = iter.next(); node !== null; node = iter.next()) {
 				yield node
@@ -394,13 +394,14 @@ export class Iterator extends okra.Iterator {
 	#open = true
 
 	public constructor(
-		public readonly tree: Tree,
+		public readonly txn: Transaction,
+		public readonly dbi: DatabaseName | DatabaseID,
 		level: number,
 		lowerBound: Bound<Key> | null = null,
 		upperBound: Bound<Key> | null = null,
 		options: { reverse?: boolean } = {}
 	) {
-		super(tree, level, lowerBound, upperBound, options.reverse ?? false)
+		super(txn, dbi, level, lowerBound, upperBound, options.reverse ?? false)
 	}
 
 	public close() {

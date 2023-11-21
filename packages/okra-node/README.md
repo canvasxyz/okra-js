@@ -2,6 +2,8 @@
 
 [![NPM version](https://img.shields.io/npm/v/@canvas-js/okra-node)](https://www.npmjs.com/package/@canvas-js/okra-node) ![TypeScript types](https://img.shields.io/npm/types/@canvas-js/okra-node)
 
+Native NodeJS bindings for the LMDB Okra implementation.
+
 ## Install
 
 ```
@@ -18,6 +20,21 @@ The following targets are supported:
 - `aarch64-macos`
 
 ## Usage
+
+This package exports the LMDB classes `Environment`, `Transaction`, and `Cursor`, and the Okra classes `Tree` and `Iterator`.
+
+The basic steps are
+
+1. Open an environment with `const env = new Environment(path, { ... })`
+2. Open a transaction with `const txn = new Transaction(env, { ... })`
+3. Open a database id with `const dbi = txn.openDatabase(...)`
+4. Open a tree with `const tree = new Tree(txn, dbi, { ... })`
+5. Interact with the tree via the `get`/`set`/`delete`/etc methods
+6. Close the tree
+7. Commit or abort the transaction
+8. Close the environment
+
+> ⚠️ Trees **must** be closed with `tree.close()` **before** the transaction is committed or aborted.
 
 ```ts
 import { Environment } from "@canvas-js/okra-node"

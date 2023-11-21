@@ -7,15 +7,15 @@ const okra = @import("okra");
 const c = @import("./c.zig");
 const n = @import("./n.zig");
 
-pub fn parseDatabase(env: c.napi_env, dbi_value: c.napi_value, txn_ptr: *lmdb.Transaction) !lmdb.Transaction.DBI {
+pub fn parseDatabase(env: c.napi_env, dbi_value: c.napi_value, txn: lmdb.Transaction) !lmdb.Transaction.DBI {
     switch (try n.typeOf(env, dbi_value)) {
         c.napi_null, c.napi_undefined => {
-            return txn_ptr.openDatabase(.{});
+            return txn.openDatabaseZ(null, .{});
         },
         c.napi_string => {
-            const name = try n.parseStringAlloc(env, dbi_value, allocator);
+            const name = try n.copyStringZ(allocator, env, dbi_value);
             defer allocator.free(name);
-            return try txn_ptr.openDatabase(.{ .name = name });
+            return try txn.openDatabaseZ(name, .{});
         },
         c.napi_number => {
             return try n.parseUint32(env, dbi_value);

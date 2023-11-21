@@ -8,7 +8,7 @@ const c = @import("../c.zig");
 const n = @import("../n.zig");
 const utils = @import("../utils.zig");
 
-const Tree = @import("tree.zig");
+const Transaction = @import("transaction.zig");
 
 pub const TypeTag = c.napi_type_tag{
     .lower = 0xCDC2ADD450A84D10,
@@ -20,33 +20,34 @@ pub const methods = [_]n.Method{
     n.createMethod("next", 0, next),
 };
 
-pub const argc = 5;
+pub const argc = 6;
 
-/// `new Iterator(tree, level, lowerBound, upperBound)`
-pub fn create(env: c.napi_env, this: c.napi_value, args: *const [5]c.napi_value) !c.napi_value {
-    const tree_ptr = try n.unwrap(okra.Tree, &Tree.TypeTag, env, args[0]);
+/// `new Iterator(txn, dbi, level, lowerBound, upperBound, reverse)`
+pub fn create(env: c.napi_env, this: c.napi_value, args: *const [argc]c.napi_value) !c.napi_value {
+    const txn_ptr = try n.unwrap(lmdb.Transaction, &Transaction.TypeTag, env, args[0]);
+    const dbi = try utils.parseDatabase(env, args[1], txn_ptr.*);
 
-    const level = try n.parseUint32(env, args[1]);
+    const level = try n.parseUint32(env, args[2]);
     if (level >= 0xFF) {
         return n.throwRangeError(env, "invalid level (expected level < 255)");
     }
 
-    const lower_bound_arg = args[2];
+    const lower_bound_arg = args[3];
     const lower_bound = switch (try n.typeOf(env, lower_bound_arg)) {
         c.napi_null => null,
         else => try parseBound(env, lower_bound_arg),
     };
 
-    const upper_bound_arg = args[3];
+    const upper_bound_arg = args[4];
     const upper_bound = switch (try n.typeOf(env, upper_bound_arg)) {
         c.napi_null => null,
         else => try parseBound(env, upper_bound_arg),
     };
 
-    const reverse = try n.parseBoolean(env, args[4]);
+    const reverse = try n.parseBoolean(env, args[5]);
 
     const iter_ptr = try allocator.create(okra.Iterator);
-    iter_ptr.* = try okra.Iterator.open(allocator, tree_ptr, .{
+    iter_ptr.* = try okra.Iterator.open(allocator, txn_ptr.*, dbi, .{
         .level = @intCast(level),
         .lower_bound = lower_bound,
         .upper_bound = upper_bound,

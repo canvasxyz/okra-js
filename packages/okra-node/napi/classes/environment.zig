@@ -1,7 +1,6 @@
 const std = @import("std");
 const allocator = std.heap.c_allocator;
 
-const okra = @import("okra");
 const lmdb = @import("lmdb");
 
 const c = @import("../c.zig");
@@ -21,44 +20,45 @@ pub const methods = [_]n.Method{
 
 pub const argc = 2;
 
-/// `new Environment(path, options)`
-pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
+/// `new Environment(path, { mapSize, databases })`
+pub fn create(env: c.napi_env, this: c.napi_value, args: *const [argc]c.napi_value) !c.napi_value {
     const path_arg = args[0];
     const options_arg = args[1];
 
-    const path = try n.parseStringAlloc(env, path_arg, allocator);
+    const path = try n.copyStringZ(allocator, env, path_arg);
     defer allocator.free(path);
 
-    std.fs.cwd().access(path, .{ .mode = .read_write }) catch |err| {
+    std.fs.cwd().accessZ(path, .{ .mode = .read_write }) catch |err| {
         switch (err) {
-            error.FileNotFound => try std.fs.cwd().makeDir(path),
-            else => {
-                return err;
-            },
+            error.FileNotFound => try std.fs.cwd().makePath(std.mem.span(path.ptr)),
+            else => return err,
         }
     };
 
-    var map_size: usize = 10485760;
+    var options = lmdb.Environment.EnvironmentOptions{};
+
     const map_size_property = try n.createString(env, "mapSize");
     const map_size_value = try n.getProperty(env, options_arg, map_size_property);
     const map_size_value_type = try n.typeOf(env, map_size_value);
     if (map_size_value_type != c.napi_undefined) {
-        map_size = try n.parseUint32(env, map_size_value);
+        options.map_size = try n.parseUint32(env, map_size_value);
     }
 
     const databases_property = try n.createString(env, "databases");
     const databases_value = try n.getProperty(env, options_arg, databases_property);
     const databases_value_type = try n.typeOf(env, databases_value);
-    const databases = switch (databases_value_type) {
-        c.napi_undefined => 0,
-        c.napi_null => 0,
-        else => try n.parseUint32(env, databases_value),
-    };
+    switch (databases_value_type) {
+        c.napi_undefined => {},
+        c.napi_null => {},
+        else => {
+            options.max_dbs = try n.parseUint32(env, databases_value);
+        },
+    }
 
     const env_ptr = try allocator.create(lmdb.Environment);
-    env_ptr.* = try lmdb.Environment.open(path, .{ .map_size = map_size, .max_dbs = databases });
-    try n.wrap(lmdb.Environment, env, this, env_ptr, destroy, &TypeTag);
+    env_ptr.* = try lmdb.Environment.openZ(path, options);
 
+    try n.wrap(lmdb.Environment, env, this, env_ptr, destroy, &TypeTag);
     return null;
 }
 
