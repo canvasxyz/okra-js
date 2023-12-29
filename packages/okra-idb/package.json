@@ -1,7 +1,7 @@
 {
 	"name": "@canvas-js/okra-idb",
 	"description": "Persistent Okra database backed by IndexedDB",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
