@@ -58,7 +58,7 @@ export class Builder extends NodeStore {
 				}
 
 				assert(node.level === level, "unexpected node level")
-				if (this.isSplit(node.hash)) {
+				if (this.isBoundary(node.hash)) {
 					await this.setNode({ level: level + 1, key, hash: hash.digest() })
 					nodeCount++
 					key = node.key

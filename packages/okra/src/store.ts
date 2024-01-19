@@ -153,7 +153,7 @@ export class NodeStore {
 		return hash.digest()
 	}
 
-	protected isSplit(hash: Uint8Array): boolean {
+	protected isBoundary(hash: Uint8Array): boolean {
 		const view = new DataView(hash.buffer, hash.byteOffset, 4)
 		return view.getUint32(0) < this.limit
 	}

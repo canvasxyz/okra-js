@@ -2,8 +2,7 @@ import test, { ExecutionContext } from "ava"
 import { Entry } from "@canvas-js/okra"
 import { MemoryTree } from "@canvas-js/okra-memory"
 
-import { compareEntries, map, random, getEnvironment, writeTree, readTree } from "./utils.js"
-import { Database } from "@canvas-js/okra-node"
+import { compareEntries, map, random, getEnvironment, writeTree } from "./utils.js"
 
 async function compare(t: ExecutionContext, entries: Iterable<Entry>) {
 	const memoryTree = await MemoryTree.open()
@@ -51,5 +50,3 @@ test("cross-reference a tree with 5000 random entries", async (t) => {
 
 	await compare(t, entries)
 })
-
-// TODO: instantiate a JavaScript Tree implementation using the Zig LMDB bindings
