@@ -20,15 +20,15 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@ava/typescript": "^4.1.0",
-		"@types/node": "^20.7.1",
-		"ava": "^5.3.1",
-		"nanoid": "^5.0.1",
+		"@types/node": "^20.11.5",
+		"ava": "^6.0.1",
+		"nanoid": "^5.0.4",
 		"prando": "^6.0.1",
-		"typescript": "^5.2.2"
+		"typescript": "^5.3.3"
 	},
 	"dependencies": {
-		"@noble/hashes": "^1.3.2",
-		"@types/debug": "^4.1.9",
+		"@noble/hashes": "^1.3.3",
+		"@types/debug": "^4.1.12",
 		"abstract-level": "^1.0.3",
 		"debug": "^4.3.4"
 	}
