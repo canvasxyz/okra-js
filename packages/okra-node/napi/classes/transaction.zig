@@ -17,11 +17,6 @@ pub const TypeTag = c.napi_type_tag{
 pub const methods = [_]n.Method{
     n.createMethod("abort", 0, abort),
     n.createMethod("commit", 0, commit),
-    n.createMethod("openDatabase", 1, openDatabase),
-
-    n.createMethod("get", 2, get),
-    n.createMethod("set", 3, set),
-    n.createMethod("delete", 2, delete),
 };
 
 pub const argc = 3;
@@ -46,7 +41,8 @@ pub fn create(env: c.napi_env, this: c.napi_value, args: *const [3]c.napi_value)
     }
 
     const txn_ptr = try allocator.create(lmdb.Transaction);
-    txn_ptr.* = try lmdb.Transaction.open(env_ptr.*, .{ .mode = mode, .parent = parent });
+    txn_ptr.* = try lmdb.Transaction.init(env_ptr.*, .{ .mode = mode, .parent = parent });
+
     try n.wrap(lmdb.Transaction, env, this, txn_ptr, destroy, &TypeTag);
 
     return null;
@@ -68,45 +64,6 @@ pub fn abort(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.
 pub fn commit(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
     const txn_ptr = try n.unwrap(lmdb.Transaction, &TypeTag, env, this);
     try txn_ptr.commit();
-
-    return null;
-}
-
-pub fn openDatabase(env: c.napi_env, this: c.napi_value, args: *const [1]c.napi_value) !c.napi_value {
-    const txn_ptr = try n.unwrap(lmdb.Transaction, &TypeTag, env, this);
-    const dbi = try utils.parseDatabase(env, args[0], txn_ptr);
-    return try n.createUint32(env, dbi);
-}
-
-pub fn get(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
-    const txn_ptr = try n.unwrap(lmdb.Transaction, &TypeTag, env, this);
-    const dbi = try utils.parseDatabase(env, args[0], txn_ptr);
-    const key = try n.parseTypedArray(u8, env, args[1]);
-    const value = try txn_ptr.get(dbi, key);
-    if (value) |bytes| {
-        return n.createTypedArray(u8, env, bytes);
-    } else {
-        return n.getNull(env);
-    }
-}
-
-pub fn set(env: c.napi_env, this: c.napi_value, args: *const [3]c.napi_value) !c.napi_value {
-    const txn_ptr = try n.unwrap(lmdb.Transaction, &TypeTag, env, this);
-    const dbi = try utils.parseDatabase(env, args[0], txn_ptr);
-    const key = try n.parseTypedArray(u8, env, args[1]);
-    const value = try n.parseTypedArray(u8, env, args[2]);
-
-    try txn_ptr.set(dbi, key, value);
-
-    return null;
-}
-
-pub fn delete(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
-    const txn_ptr = try n.unwrap(lmdb.Transaction, &TypeTag, env, this);
-    const dbi = try utils.parseDatabase(env, args[0], txn_ptr);
-    const key = try n.parseTypedArray(u8, env, args[1]);
-
-    try txn_ptr.delete(dbi, key);
 
     return null;
 }

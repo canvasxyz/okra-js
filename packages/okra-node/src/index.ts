@@ -15,10 +15,8 @@ const target = family === null ? `${arch}-${platform}` : `${arch}-${platform}-${
 
 const require = createRequire(import.meta.url)
 
-const okra = require(`../build/${target}/okra.node`)
-
-export type DatabaseName = string | null
-export type DatabaseID = number
+// const okra = require(`../build/${target}/okra.node`)
+const okra = require(`../zig-out/lib/${target}/okra.node`)
 
 export interface EnvironmentOptions {
 	mapSize?: number
@@ -48,11 +46,8 @@ export class Environment extends okra.Environment {
 		await this.#queue.add(() => super.resize(mapSize))
 	}
 
-	public async read<T>(
-		callback: (txn: Transaction) => Awaitable<T>,
-		options: { dbi?: DatabaseName | DatabaseID } = {}
-	): Promise<T> {
-		const txn = new Transaction(this, { ...options, readOnly: true })
+	public async read<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T> {
+		const txn = new Transaction(this, { readOnly: true })
 		try {
 			return await callback(txn)
 		} finally {
@@ -60,27 +55,10 @@ export class Environment extends okra.Environment {
 		}
 	}
 
-	public readTree<T>(
-		callback: (tree: Tree) => Awaitable<T>,
-		options: { dbi?: DatabaseName | DatabaseID } = {}
-	): Promise<T> {
-		return this.read(async (txn) => {
-			const tree = new Tree(txn, options)
-			try {
-				return await callback(tree)
-			} finally {
-				tree.close()
-			}
-		})
-	}
-
-	public async write<T>(
-		callback: (txn: Transaction) => Awaitable<T>,
-		options: { dbi?: DatabaseName | DatabaseID } = {}
-	): Promise<T> {
+	public async write<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T> {
 		let result: T | null = null
 		await this.#queue.add(async () => {
-			const txn = new Transaction(this, { ...options, readOnly: false })
+			const txn = new Transaction(this, { readOnly: false })
 			try {
 				result = await callback(txn)
 				txn.commit()
@@ -92,91 +70,89 @@ export class Environment extends okra.Environment {
 
 		return result!
 	}
-
-	public writeTree<T>(
-		callback: (tree: Tree) => Awaitable<T>,
-		options: { dbi?: DatabaseName | DatabaseID } = {}
-	): Promise<T> {
-		return this.write(async (txn) => {
-			const tree = new Tree(txn, options)
-			try {
-				return await callback(tree)
-			} finally {
-				tree.close()
-			}
-		})
-	}
 }
 
 export interface TransactionOptions {
 	readOnly?: boolean
 	parent?: Transaction
-	dbi?: DatabaseName | DatabaseID
 }
 
-export class Transaction extends okra.Transaction implements KeyValueStore {
+export class Transaction extends okra.Transaction {
 	public readonly readOnly: boolean
 	public readonly parent: Transaction | null
 
 	#open = true
-	#dbi: number
 
 	constructor(public readonly env: Environment, options: TransactionOptions = {}) {
-		const readOnly = options.readOnly ?? false
-		const parent = options.parent ?? null
+		const { readOnly = false, parent = null } = options
 		super(env, readOnly, parent)
 
 		this.readOnly = readOnly
 		this.parent = parent
-		this.#dbi = typeof options.dbi === "number" ? options.dbi : this.openDatabase(options.dbi ?? null)
-	}
-
-	public openDatabase(dbi: DatabaseName): DatabaseID {
-		return super.openDatabase(dbi)
 	}
 
 	public abort() {
-		if (this.#open) {
-			super.abort()
-			this.#open = false
-		} else {
+		if (this.#open === false) {
 			throw new Error("transaction closed")
 		}
+
+		super.abort()
+		this.#open = false
 	}
 
 	public commit() {
-		if (this.#open) {
-			super.commit()
-			this.#open = false
-		} else {
+		if (this.#open === false) {
 			throw new Error("transaction closed")
+		}
+
+		super.commit()
+		this.#open = false
+	}
+
+	public async openTree<T = void>(name: string | null, callback: (tree: Tree) => Awaitable<T>): Promise<T> {
+		if (this.#open === false) {
+			throw new Error("transaction closed")
+		}
+
+		const tree = new Tree(this, name)
+		try {
+			return await callback(tree)
+		} finally {
+			tree.close()
 		}
 	}
 
-	public get(key: Uint8Array, options: { dbi?: DatabaseName | DatabaseID } = {}): Uint8Array | null {
-		const dbi = options.dbi ?? this.#dbi
-		return super.get(dbi, key)
+	public database(name: string | null = null): Database {
+		return new Database(this, name)
+	}
+}
+
+export class Database extends okra.Database implements KeyValueStore {
+	constructor(txn: Transaction, name: string | null) {
+		super(txn, name)
 	}
 
-	public set(key: Uint8Array, value: Uint8Array, options: { dbi?: DatabaseName | DatabaseID } = {}) {
-		const dbi = options.dbi ?? this.#dbi
-		super.set(dbi, key, value)
+	public get(key: Uint8Array): Uint8Array | null {
+		return super.get(key)
 	}
 
-	public delete(key: Uint8Array, options: { dbi?: DatabaseName | DatabaseID } = {}) {
-		const dbi = options.dbi ?? this.#dbi
-		if (super.get(dbi, key) !== null) {
-			super.delete(dbi, key)
+	public set(key: Uint8Array, value: Uint8Array): void {
+		super.set(key, value)
+	}
+
+	public delete(key: Uint8Array): void {
+		if (super.get(key) !== null) {
+			super.delete(key)
 		}
 	}
 
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		options: { dbi?: DatabaseName | DatabaseID; reverse?: boolean } = {}
+		options: { reverse?: boolean } = {}
 	): AsyncIterableIterator<Entry> {
-		const { dbi = null, reverse = false } = options
-		const cursor = new Cursor(this, { dbi })
+		const { reverse = false } = options
+		const cursor = new Cursor(this)
 		if (reverse) {
 			for (let key = cursor.goToEnd(upperBound); key !== null; key = cursor.goToPrevious()) {
 				if (lowerBound !== null) {
@@ -207,22 +183,14 @@ export class Transaction extends okra.Transaction implements KeyValueStore {
 	}
 }
 
-export interface CursorOptions {
-	dbi?: DatabaseName | DatabaseID
-}
-
 export class Cursor extends okra.Cursor {
-	public readonly dbi: number
-
 	#open = true
 
-	constructor(public readonly txn: Transaction, options: CursorOptions = {}) {
-		const dbi = typeof options.dbi === "number" ? options.dbi : txn.openDatabase(options.dbi ?? null)
-		super(txn, dbi)
-		this.dbi = dbi
+	constructor(public readonly db: Database) {
+		super(db)
 	}
 
-	public close() {
+	public close(): void {
 		if (this.#open) {
 			super.close()
 			this.#open = false
@@ -276,11 +244,11 @@ export class Cursor extends okra.Cursor {
 		return super.getCurrentValue()
 	}
 
-	public setCurrentValue(value: Uint8Array) {
+	public setCurrentValue(value: Uint8Array): void {
 		super.setCurrentValue(value)
 	}
 
-	public deleteCurrentKey() {
+	public deleteCurrentKey(): void {
 		super.deleteCurrentKey()
 	}
 
@@ -300,7 +268,7 @@ export class Cursor extends okra.Cursor {
 		return super.goToLast()
 	}
 
-	public goToKey(key: Uint8Array) {
+	public goToKey(key: Uint8Array): void {
 		super.goToKey(key)
 	}
 
@@ -310,18 +278,14 @@ export class Cursor extends okra.Cursor {
 }
 
 export interface TreeOptions {
-	dbi?: DatabaseName | DatabaseID
+	name?: string | null
 }
 
 export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
-	public readonly dbi: number
-
 	#open = true
 
-	public constructor(public readonly txn: Transaction, options: TreeOptions = {}) {
-		const dbi = typeof options.dbi === "number" ? options.dbi : txn.openDatabase(options.dbi ?? null)
-		super(txn, dbi)
-		this.dbi = dbi
+	public constructor(public readonly txn: Transaction, name: string | null) {
+		super(txn, name)
 	}
 
 	public close() {

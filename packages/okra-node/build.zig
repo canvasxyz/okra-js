@@ -1,35 +1,32 @@
 const std = @import("std");
-const FileSource = std.build.FileSource;
-const LazyPath = std.build.LazyPath;
+const LazyPath = std.Build.LazyPath;
 
-const lmdb_source_files = [_][]const u8{
-    "libs/okra/libs/zig-lmdb/libs/openldap/libraries/liblmdb/mdb.c",
-    "libs/okra/libs/zig-lmdb/libs/openldap/libraries/liblmdb/midl.c",
-};
+pub fn build(b: *std.Build) void {
+    addTarget(b, "x64-linux-glibc/okra.node", .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu });
+    addTarget(b, "x64-linux-musl/okra.node", .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl });
+    addTarget(b, "arm64-linux-glibc/okra.node", .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu });
+    addTarget(b, "arm64-linux-musl/okra.node", .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl });
+    addTarget(b, "x64-darwin/okra.node", .{ .cpu_arch = .x86_64, .os_tag = .macos });
+    addTarget(b, "arm64-darwin/okra.node", .{ .cpu_arch = .aarch64, .os_tag = .macos });
+}
 
-const lmdb_include_path = LazyPath{ .path = "libs/okra/libs/zig-lmdb/libs/openldap/libraries/liblmdb" };
+fn addTarget(b: *std.Build, name: []const u8, target: std.Target.Query) void {
+    const lmdb = b.dependency("lmdb", .{});
+    const okra = b.dependency("okra", .{});
 
-pub fn build(b: *std.build.Builder) void {
-    const target = std.build.standardTargetOptions(b, .{});
-    const optimize = std.build.standardOptimizeOption(b, .{});
-
-    const lmdb = b.anonymousDependency("libs/okra/libs/zig-lmdb/", @import("libs/okra/libs/zig-lmdb/build.zig"), .{});
-    const okra = b.addModule("okra", .{
-        .source_file = FileSource.relative("libs/okra/src/lib.zig"),
-        .dependencies = &.{.{ .name = "lmdb", .module = lmdb.module("lmdb") }},
-    });
-
-    const okra_node = b.addStaticLibrary(.{
+    const okra_node = b.addSharedLibrary(.{
         .name = "okra-node",
         .root_source_file = LazyPath.relative("napi/lib.zig"),
-        .target = target,
-        .optimize = optimize,
+        .target = b.resolveTargetQuery(target),
+        .optimize = .ReleaseSafe,
     });
 
+    okra_node.linkLibC();
+    okra_node.linker_allow_shlib_undefined = true;
+
     okra_node.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include/node" });
-    okra_node.addIncludePath(lmdb_include_path);
-    okra_node.addCSourceFiles(&lmdb_source_files, &.{});
-    okra_node.addModule("lmdb", lmdb.module("lmdb"));
-    okra_node.addModule("okra", okra);
-    b.installArtifact(okra_node);
+    okra_node.root_module.addImport("lmdb", lmdb.module("lmdb"));
+    okra_node.root_module.addImport("okra", okra.module("okra"));
+    const artifact = b.addInstallArtifact(okra_node, .{ .dest_sub_path = name });
+    b.getInstallStep().dependOn(&artifact.step);
 }

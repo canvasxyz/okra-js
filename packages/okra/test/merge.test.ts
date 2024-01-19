@@ -42,7 +42,7 @@ async function testMerge(
 	deltaA: number,
 	deltaB: number
 ): Promise<void> {
-	const rng = new Prando(seed)
+	const rng = new Prando.default(seed)
 
 	const metadata = { K: 16, Q: 4 }
 	const [storeA, storeB] = [new MemoryStore(), new MemoryStore()]

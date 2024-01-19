@@ -2,8 +2,7 @@
 	"extends": "../../../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "lib",
-		"rootDir": ".",
-		"skipLibCheck": true
+		"rootDir": "."
 	},
 	"references": [{ "path": "../." }, { "path": "../../okra" }]
 }

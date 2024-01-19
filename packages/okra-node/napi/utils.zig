@@ -7,21 +7,18 @@ const okra = @import("okra");
 const c = @import("./c.zig");
 const n = @import("./n.zig");
 
-pub fn parseDatabase(env: c.napi_env, dbi_value: c.napi_value, txn_ptr: *lmdb.Transaction) !lmdb.Transaction.DBI {
-    switch (try n.typeOf(env, dbi_value)) {
+pub fn openDB(env: c.napi_env, name_value: c.napi_value, txn_ptr: *lmdb.Transaction) !lmdb.Database {
+    switch (try n.typeOf(env, name_value)) {
         c.napi_null, c.napi_undefined => {
-            return txn_ptr.openDatabase(.{});
+            return txn_ptr.database(null, .{});
         },
         c.napi_string => {
-            const name = try n.parseStringAlloc(env, dbi_value, allocator);
+            const name = try n.parseStringAlloc(env, name_value, allocator);
             defer allocator.free(name);
-            return try txn_ptr.openDatabase(.{ .name = name });
-        },
-        c.napi_number => {
-            return try n.parseUint32(env, dbi_value);
+            return try txn_ptr.database(name, .{ .create = true });
         },
         else => {
-            return n.throwTypeError(env, "could not open database: expected number, string, null, or undefined");
+            return n.throwTypeError(env, "could not open database: expected string, null, or undefined");
         },
     }
 }

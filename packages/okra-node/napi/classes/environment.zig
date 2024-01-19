@@ -56,7 +56,12 @@ pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value)
     };
 
     const env_ptr = try allocator.create(lmdb.Environment);
-    env_ptr.* = try lmdb.Environment.open(path, .{ .map_size = map_size, .max_dbs = databases });
+    env_ptr.* = try lmdb.Environment.init(path, .{
+        .map_size = map_size,
+        .max_dbs = databases,
+        .no_tls = true,
+    });
+
     try n.wrap(lmdb.Environment, env, this, env_ptr, destroy, &TypeTag);
 
     return null;
@@ -71,7 +76,7 @@ pub fn destroy(_: c.napi_env, finalize_data: ?*anyopaque, _: ?*anyopaque) callco
 
 pub fn close(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
     const env_ptr = try n.unwrap(lmdb.Environment, &TypeTag, env, this);
-    env_ptr.close();
+    env_ptr.deinit();
     return null;
 }
 

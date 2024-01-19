@@ -9,6 +9,8 @@ import { debug } from "./format.js"
 import { DEFAULT_K, DEFAULT_Q, MAXIMUM_HEIGHT } from "./constants.js"
 import { assert, equalKeys, lessThan } from "./utils.js"
 
+
+
 type Operation = { type: "set"; key: Uint8Array; value: Uint8Array } | { type: "delete"; key: Uint8Array }
 
 // we have enums at home
@@ -83,8 +85,12 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 		const root = await this.getRoot()
 		this.log("- got root %d %k %h", root.level, root.key, root.hash)
 
-		const result =
-			root.level === 0 ? await this.applyLeaf(null, operation) : await this.applyNode(root.level - 1, null, operation)
+		let result: Result
+		if (root.level === 0) {
+			result = await this.applyLeaf(null, operation)
+		} else {
+			result = await this.applyNode(root.level - 1, null, operation)
+		}
 
 		if (result === Result.Delete) {
 			throw new Error("internal error")

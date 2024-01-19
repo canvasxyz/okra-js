@@ -2,17 +2,18 @@ import test from "ava"
 
 import { Cursor } from "@canvas-js/okra-node"
 
-import { getEnvironment, encode, decode } from "./utils.js"
+import { getEnvironment, encode } from "./utils.js"
 
 test("cursor operations", async (t) => {
 	const env = getEnvironment(t, {})
 
 	await env.write((txn) => {
-		txn.set(encode("a"), encode("foo"))
-		txn.set(encode("b"), encode("bar"))
-		txn.set(encode("c"), encode("baz"))
+		const db = txn.database()
+		db.set(encode("a"), encode("foo"))
+		db.set(encode("b"), encode("bar"))
+		db.set(encode("c"), encode("baz"))
 
-		const cursor = new Cursor(txn)
+		const cursor = new Cursor(db)
 		t.deepEqual(cursor.goToFirst(), encode("a"))
 		t.deepEqual(cursor.getCurrentKey(), encode("a"))
 		t.deepEqual(cursor.getCurrentValue(), encode("foo"))
@@ -35,8 +36,8 @@ test("cursor operations", async (t) => {
 		t.is(cursor.goToPrevious(), null)
 		t.deepEqual(cursor.getCurrentEntry(), [encode("a"), encode("foo")])
 
-		txn.set(encode("f"), encode("ooo"))
-		txn.set(encode("g"), encode("aaa"))
+		db.set(encode("f"), encode("ooo"))
+		db.set(encode("g"), encode("aaa"))
 
 		t.deepEqual(cursor.seek(encode("e")), encode("f"))
 

@@ -7,7 +7,7 @@ import Prando from "prando"
 import { bytesToHex as hex, hexToBytes } from "@noble/hashes/utils"
 import { nanoid } from "nanoid"
 
-import { Node, Tree, Builder, DEFAULT_METADATA, Entry } from "@canvas-js/okra"
+import { KeyValueStore, Source, Target, Node, Tree, Builder, DEFAULT_METADATA, Entry, Awaitable } from "@canvas-js/okra"
 import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
 import { Environment, EnvironmentOptions } from "@canvas-js/okra-node"
 
@@ -20,6 +20,20 @@ export function getEnvironment(t: ExecutionContext, options: EnvironmentOptions 
 	})
 
 	return env
+}
+
+export function readTree<T>(
+	env: Environment,
+	callback: (tree: KeyValueStore & Source & Target) => Awaitable<T>
+): Promise<T> {
+	return env.read((txn) => txn.openTree<T>(null, callback))
+}
+
+export function writeTree<T>(
+	env: Environment,
+	callback: (tree: KeyValueStore & Source & Target) => Awaitable<T>
+): Promise<T> {
+	return env.write((txn) => txn.openTree<T>(null, callback))
 }
 
 export async function initialize(
@@ -125,7 +139,7 @@ export function shuffle<T>(array: T[]) {
 }
 
 export function* random(seed: string, min: number, max: number, count: number): Generator<number, void, undefined> {
-	const rng = new Prando(seed)
+	const rng = new Prando.default(seed)
 	for (let i = 0; i < count; i++) {
 		yield rng.nextInt(min, max - 1)
 	}

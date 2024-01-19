@@ -46,7 +46,7 @@ pub fn create(env: c.napi_env, this: c.napi_value, args: *const [5]c.napi_value)
     const reverse = try n.parseBoolean(env, args[4]);
 
     const iter_ptr = try allocator.create(okra.Iterator);
-    iter_ptr.* = try okra.Iterator.open(allocator, tree_ptr, .{
+    iter_ptr.* = try okra.Iterator.init(allocator, tree_ptr.db, .{
         .level = @intCast(level),
         .lower_bound = lower_bound,
         .upper_bound = upper_bound,
@@ -78,7 +78,7 @@ pub fn destroy(_: c.napi_env, finalize_data: ?*anyopaque, _: ?*anyopaque) callco
 
 pub fn close(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
     const iter_ptr = try n.unwrap(okra.Iterator, &TypeTag, env, this);
-    iter_ptr.close();
+    iter_ptr.deinit();
     return null;
 }
 

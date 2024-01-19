@@ -19,11 +19,44 @@ The following targets are supported:
 
 ## Usage
 
+First open an `Environment`.
+
 ```ts
 import { Environment } from "@canvas-js/okra-node"
 
 const env = new Environment("./path/to/data/directory")
-await env.writeTree(async (tree) => {
+try {
+	// ...
+} finally {
+	env.close()
+}
+```
+
+With the environment, you can open transactions, which are either read-write or read-only.
+
+```ts
+await env.read(async (txn) => {
+	/* ... */
+})
+
+await env.write(async (txn) => {
+	/* ... */
+})
+```
+
+With a transaction, you can open multiple named _databases_ and/or _trees_. A `Database` is a named database in the LMDB key/value store. A `Tree` is a Okra tree that wraps an underlying `Database`. Trees need to be closed before the transaction commits, so they're only accessible within an `txn.openTree(name, async (tree) => { ... })` callback. Databases don't have to be closed, so `txn.database(name)` returns a class directly.
+
+Both `Database` and `Tree` implement the `KeyValueStore` interface.
+
+```ts
+const auxillaryDB = txn.database("my-auxillary-db")
+auxillaryDB.set(key1, value1)
+
+await txn.openTree("my-okra-tree", async (tree) => {
+	// ...
+	tree.set(key2, value2)
+	// ...
+	const root = tree.getRoot()
 	// ...
 })
 ```
@@ -33,86 +66,45 @@ await env.writeTree(async (tree) => {
 ```ts
 import { KeyValueStore, Bound, Entry, Node, Key, Source, Target, Awaitable } from "@canvas-js/okra"
 
-export type DatabaseName = string | null
-export type DatabaseID = number
-
 export interface EnvironmentOptions {
 	mapSize?: number
 	databases?: number
 }
 
-declare class Environment {
+export declare class Environment {
 	public readonly path: string
 
 	public constructor(path: string, options?: EnvironmentOptions)
 
 	public close(): void
 
+	public read<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T>
+	public write<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T>
+
 	public resize(mapSize: number): void
-
-	public read<T>(
-		callback: (txn: Transaction) => Awaitable<T>,
-		options?: { dbi?: DatabaseName | DatabaseID }
-	): Promise<T>
-
-	public readTree<T>(callback: (tree: Tree) => Awaitable<T>, options?: { dbi?: DatabaseName | DatabaseID }): Promise<T>
-
-	public write<T>(
-		callback: (txn: Transaction) => Awaitable<T>,
-		options?: { dbi?: DatabaseName | DatabaseID }
-	): Promise<T>
-
-	public writeTree<T>(callback: (tree: Tree) => Awaitable<T>, options?: { dbi?: DatabaseName | DatabaseID }): Promise<T>
 }
 
-export interface TransactionOptions {
-	readOnly?: boolean
-	parent?: Transaction
-	dbi?: DatabaseName | DatabaseID
+export declare class Transaction {
+	public database(name: string | null = null): Database
+
+	public async openTree(name: string | null, callback: (tree: Tree) => Awaitable<T>): Promise<T>
 }
 
-declare class Transaction implements KeyValueStore {
-	public readonly env: Environment
-	public readonly readOnly: boolean
-	public readonly parent: Transaction | null
-
-	public constructor(env: Environment, options?: TransactionOptions)
-
-	public abort(): void
-
-	public commit(): void
-
-	public openDatabase(dbi: DatabaseName): DatabaseID
-
-	public get(key: Uint8Array, options?: { dbi?: DatabaseName | DatabaseID }): Uint8Array | null
-
-	public set(key: Uint8Array, value: Uint8Array, options?: { dbi?: DatabaseName | DatabaseID }): void
-
-	public delete(key: Uint8Array, options?: { dbi?: DatabaseName | DatabaseID }): void
+export declare class Database implements KeyValueStore {
+	public get(key: Uint8Array): Uint8Array | null
+	public set(key: Uint8Array, value: Uint8Array): void
+	public delete(key: Uint8Array): void
 
 	public entries(
 		lowerBound?: Bound<Uint8Array> | null,
 		upperBound?: Bound<Uint8Array> | null,
-		options?: { dbi?: DatabaseName | DatabaseID; reverse?: boolean }
+		options?: { reverse?: boolean }
 	): AsyncIterableIterator<Entry>
 }
 
-export interface TreeOptions {
-	dbi?: DatabaseName | DatabaseID
-}
-
-declare class Tree implements KeyValueStore, Source, Target {
-	public readonly txn: Transaction
-	public readonly dbi: number
-
-	public constructor(txn: Transaction, options?: TreeOptions)
-
-	public close(): void
-
+export declare class Tree implements KeyValueStore, Source, Target {
 	public get(key: Uint8Array): Uint8Array | null
-
 	public set(key: Uint8Array, value: Uint8Array): void
-
 	public delete(key: Uint8Array): void
 
 	public entries(
@@ -122,9 +114,7 @@ declare class Tree implements KeyValueStore, Source, Target {
 	): AsyncIterableIterator<Entry>
 
 	public getRoot(): Node
-
 	public getNode(level: number, key: Key): Node | null
-
 	public getChildren(level: number, key: Key): Node[]
 
 	public nodes(

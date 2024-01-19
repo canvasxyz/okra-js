@@ -8,6 +8,7 @@ const n = @import("../n.zig");
 const utils = @import("../utils.zig");
 
 const Transaction = @import("transaction.zig");
+const Database = @import("database.zig");
 
 pub const TypeTag = c.napi_type_tag{
     .lower = 0xB157A970FCCF4AD5,
@@ -29,15 +30,15 @@ pub const methods = [_]n.Method{
     n.createMethod("seek", 1, seek),
 };
 
-pub const argc = 2;
+pub const argc = 1;
 
-/// `new Cursor(txn, dbi)`
-pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
-    const txn_ptr = try n.unwrap(lmdb.Transaction, &Transaction.TypeTag, env, args[0]);
-    const dbi = try utils.parseDatabase(env, args[1], txn_ptr);
+/// `new Cursor(db)`
+pub fn create(env: c.napi_env, this: c.napi_value, args: *const [1]c.napi_value) !c.napi_value {
+    const db_ptr = try n.unwrap(lmdb.Database, &Database.TypeTag, env, args[0]);
 
     const cursor_ptr = try allocator.create(lmdb.Cursor);
-    cursor_ptr.* = try lmdb.Cursor.open(txn_ptr.*, dbi);
+    cursor_ptr.* = try lmdb.Cursor.init(db_ptr.*);
+
     try n.wrap(lmdb.Cursor, env, this, cursor_ptr, destroy, &TypeTag);
 
     return null;
@@ -52,7 +53,7 @@ pub fn destroy(_: c.napi_env, finalize_data: ?*anyopaque, _: ?*anyopaque) callco
 
 pub fn close(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
     const cursor_ptr = try n.unwrap(lmdb.Cursor, &TypeTag, env, this);
-    cursor_ptr.close();
+    cursor_ptr.deinit();
     return null;
 }
 

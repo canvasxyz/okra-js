@@ -2,7 +2,7 @@ import test from "ava"
 
 import { hexToBytes as hex } from "@noble/hashes/utils"
 
-import { getEnvironment } from "./utils.js"
+import { getEnvironment, readTree, writeTree } from "./utils.js"
 
 const encoder = new TextEncoder()
 const encode = (value: string) => encoder.encode(value)
@@ -11,9 +11,10 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 test("open a write txn during an open read txn", async (t) => {
 	const env = getEnvironment(t)
-	await env.writeTree(() => {})
-	await env.readTree(async (treeA) => {
-		const rootB = await env.writeTree(async (treeB) => {
+
+	await writeTree(env, () => {})
+	await readTree(env, async (treeA) => {
+		const rootB = await writeTree(env, async (treeB) => {
 			await wait(100)
 			treeB.set(encode("a"), encode("foo"))
 			treeB.set(encode("b"), encode("bar"))
@@ -33,21 +34,21 @@ test("open a write txn during an open read txn", async (t) => {
 			hash: hex("af1349b9f5f9a1a6a0404dea36dcc949"),
 		})
 
-		t.deepEqual(await env.readTree((treeC) => treeC.getRoot()), rootB)
+		t.deepEqual(await readTree(env, (treeC) => treeC.getRoot()), rootB)
 	})
 })
 
 test("open concurrent writes", async (t) => {
 	const env = getEnvironment(t)
-	await env.writeTree(() => {})
+	await writeTree(env, () => {})
 
 	let index = 0
 	const order = await Promise.all([
-		env.writeTree(async (tree) => {
+		writeTree(env, async (tree) => {
 			await wait(500)
 			return index++
 		}),
-		env.writeTree(async (tree) => {
+		writeTree(env, async (tree) => {
 			await wait(500)
 			return index++
 		}),
@@ -58,27 +59,27 @@ test("open concurrent writes", async (t) => {
 
 test("open lots of concurrent writes", async (t) => {
 	const env = getEnvironment(t)
-	await env.writeTree(() => {})
+	await writeTree(env, () => {})
 
 	let index = 0
 	const order = await Promise.all([
-		env.writeTree(async (txn) => {
+		writeTree(env, async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		writeTree(env, async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		writeTree(env, async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		writeTree(env, async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),
-		env.writeTree(async (txn) => {
+		writeTree(env, async (txn) => {
 			await wait(Math.ceil(Math.random() * 100))
 			return index++
 		}),

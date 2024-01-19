@@ -2,19 +2,21 @@ import test, { ExecutionContext } from "ava"
 import { Entry } from "@canvas-js/okra"
 import { MemoryTree } from "@canvas-js/okra-memory"
 
-import { compareEntries, map, random, getEnvironment } from "./utils.js"
+import { compareEntries, map, random, getEnvironment, writeTree, readTree } from "./utils.js"
+import { Database } from "@canvas-js/okra-node"
 
 async function compare(t: ExecutionContext, entries: Iterable<Entry>) {
 	const memoryTree = await MemoryTree.open()
+
 	const env = getEnvironment(t)
-	await env.writeTree(async (tree) => {
+	await writeTree(env, async (tree) => {
 		for (const [key, value] of entries) {
 			tree.set(key, value)
 			await memoryTree.set(key, value)
 		}
 	})
 
-	t.is(await env.read((txn) => compareEntries(t, txn.entries(), memoryTree.store.entries())), 0)
+	t.is(await env.read((txn) => compareEntries(t, txn.database().entries(), memoryTree.store.entries())), 0)
 }
 
 test("cross-reference a tree with 3 static entries", async (t) => {

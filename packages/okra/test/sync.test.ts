@@ -2,7 +2,7 @@ import test, { ExecutionContext } from "ava"
 
 import { Delta, KeyValueStore, collect, sync } from "@canvas-js/okra"
 
-import { getKey, defaultValue, random, initialize, iota, getEnvironment } from "./utils.js"
+import { getKey, defaultValue, random, initialize, iota, getEnvironment, readTree, writeTree } from "./utils.js"
 
 test("test sync empty source", async (t) => {
 	const [source, target] = await Promise.all([
@@ -63,19 +63,22 @@ async function testDeltaNode(
 	deleteTarget: number
 ): Promise<void> {
 	const [source, target] = [getEnvironment(t), getEnvironment(t)]
-	const expected = await source.writeTree(async (sourceTxn) => {
-		return await target.writeTree(async (targetTxn) => {
+
+	const expected = await writeTree(source, (sourceTree) =>
+		writeTree(target, async (targetTree) => {
 			for (const [key, value] of iota(count)) {
-				sourceTxn.set(key, value)
-				targetTxn.set(key, value)
+				sourceTree.set(key, value)
+				targetTree.set(key, value)
 			}
 
-			return await initializeDelta(sourceTxn, targetTxn, seed, count, deleteSource, deleteTarget)
+			return await initializeDelta(sourceTree, targetTree, seed, count, deleteSource, deleteTarget)
 		})
-	})
+	)
 
-	const actual = await source.readTree((sourceTxn) =>
-		target.readTree((targetTxn) => collect(sync(sourceTxn, targetTxn)))
+	const actual = await readTree(source, (sourceTree) =>
+		readTree(target, (targetTree) => {
+			return collect(sync(sourceTree, targetTree))
+		})
 	)
 
 	t.deepEqual(actual, expected)

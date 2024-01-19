@@ -239,7 +239,7 @@ pub fn createTypedArray(comptime T: type, env: c.napi_env, value: []const T) Err
 
     if (ptr) |data| {
         const array = @as([*]T, @ptrCast(data))[0..value.len];
-        std.mem.copy(T, array, value);
+        @memcpy(array, value);
     }
 
     var typedArray: c.napi_value = undefined;

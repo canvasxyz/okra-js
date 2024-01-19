@@ -30,13 +30,14 @@ pub const methods = [_]n.Method{
 
 pub const argc = 2;
 
-/// `new Tree(txn, dbi)`
+/// `new Tree(txn, name)`
 pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value) !c.napi_value {
     const txn_ptr = try n.unwrap(lmdb.Transaction, &Transaction.TypeTag, env, args[0]);
-    const dbi = try utils.parseDatabase(env, args[1], txn_ptr);
+    const db = try utils.openDB(env, args[1], txn_ptr);
 
     const tree_ptr = try allocator.create(okra.Tree);
-    tree_ptr.* = try okra.Tree.open(allocator, txn_ptr.*, .{ .dbi = dbi });
+    tree_ptr.* = try okra.Tree.init(allocator, db, .{});
+
     try n.wrap(okra.Tree, env, this, tree_ptr, destroy, &TypeTag);
 
     return null;
@@ -51,7 +52,7 @@ pub fn destroy(_: c.napi_env, finalize_data: ?*anyopaque, _: ?*anyopaque) callco
 
 pub fn close(env: c.napi_env, this: c.napi_value, _: *const [0]c.napi_value) !c.napi_value {
     const tree_ptr = try n.unwrap(okra.Tree, &TypeTag, env, this);
-    tree_ptr.close();
+    tree_ptr.deinit();
     return null;
 }
 
@@ -122,9 +123,10 @@ pub fn getChildren(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_v
         return n.throwRangeError(env, "invalid level (expected level < 255)");
     }
 
-    var children = try n.createArray(env);
+    const children = try n.createArray(env);
 
-    var first_child = try tree_ptr.cursor.goToNode(@intCast(level - 1), key);
+    try tree_ptr.cursor.goToNode(@intCast(level - 1), key);
+    const first_child = try tree_ptr.cursor.getCurrentNode();
     try n.setElement(env, children, 0, try utils.createNode(env, first_child));
 
     var i: u32 = 1;
