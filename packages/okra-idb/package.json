@@ -23,12 +23,8 @@
 		"debug": "^4.3.4"
 	},
 	"devDependencies": {
-		"@ava/typescript": "^4.1.0",
-		"@types/node": "^20.11.5",
-		"ava": "^6.0.1",
 		"fake-indexeddb": "^5.0.2",
-		"idb": "^8.0.0",
-		"typescript": "^5.3.3"
+		"idb": "^8.0.0"
 	},
 	"peerDependencies": {
 		"idb": "^8.0.0"

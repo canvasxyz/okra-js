@@ -1,7 +1,7 @@
 {
-	"name": "@canvas-js/okra",
-	"description": "A p2p merkle index in pure JavaScript",
-	"version": "0.2.0",
+	"name": "@canvas-js/okra-sqlite",
+	"description": "Native NodeJS bindings for Okra over LMDB",
+	"version": "0.0.01",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -9,6 +9,9 @@
 		"lib/**/*.js",
 		"lib/**/*.d.ts"
 	],
+	"engines": {
+		"node": ">=18"
+	},
 	"scripts": {
 		"test": "ava"
 	},
@@ -18,14 +21,7 @@
 	},
 	"author": "Joel Gustafson",
 	"license": "MIT",
-	"devDependencies": {
-		"nanoid": "^5.0.4",
-		"prando": "^6.0.1"
-	},
 	"dependencies": {
-		"@noble/hashes": "^1.3.3",
-		"@types/debug": "^4.1.12",
-		"abstract-level": "^1.0.3",
-		"debug": "^4.3.4"
+		"@canvas-js/okra": "^0.2.0"
 	}
 }
