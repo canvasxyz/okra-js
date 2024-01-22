@@ -57,29 +57,12 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
 		this.log(`set(%h, %h)`, key, value)
 
+		const oldLeaf = await this.getNode(0, key)
+
 		const hash = this.hashEntry(key, value)
 		const newLeaf: Node = { level: 0, key, hash, value }
 
-		const oldLeaf = await this.getNode(0, key)
-		if (oldLeaf !== null) {
-			assert(oldLeaf.value !== undefined)
-			if (this.isBoundary(oldLeaf.hash)) {
-				if (this.isBoundary(newLeaf.hash)) {
-					await this.setNode(newLeaf)
-					await this.updateNode(1, key)
-				} else {
-					await this.setNode(newLeaf)
-					await this.deleteStack(1, key)
-
-					const newParent = await this.getParent(0, key)
-					await this.updateNode(1, newParent)
-				}
-			} else {
-				await this.dispatch(newLeaf)
-			}
-		} else {
-			await this.dispatch(newLeaf)
-		}
+		await this.replace(oldLeaf, newLeaf)
 	}
 
 	public async delete(key: Uint8Array): Promise<void> {
@@ -90,82 +73,110 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 			return
 		}
 
-		await this.deleteStack(0, key)
-
-		const newParent = await this.getParent(0, key)
-		await this.updateNode(1, newParent)
-	}
-
-	private async dispatch(node: Node) {
-		const oldParent = await this.getParent(node.level, node.key)
-		await this.setNode(node)
-		if (this.isBoundary(node.hash)) {
-			await this.createStack(node.level + 1, node.key)
+		if (node.key !== null && this.isBoundary(node)) {
+			await this.deleteParents(0, key)
 		}
 
-		await this.updateNode(node.level + 1, oldParent)
+		await this.deleteNode(0, key)
+
+		const firstSibling = await this.getFirstSibling(node)
+		if (firstSibling.key === null) {
+			await this.updateAnchor(1)
+		} else {
+			await this.update(1, firstSibling.key)
+		}
 	}
 
-	private async updateNode(level: number, key: Key) {
+	private async update(level: number, key: Key) {
+		const oldNode = await this.getNode(level, key)
 		const hash = await this.getHash(level, key)
-
 		const newNode: Node = { level, key, hash }
-		if (key === null) {
+		await this.replace(oldNode, newNode)
+	}
+
+	private async replace(oldNode: Node | null, newNode: Node) {
+		if (oldNode !== null && this.isBoundary(oldNode)) {
+			await this.replaceBoundary(newNode)
+		} else {
+			const firstSibling = await this.getFirstSibling(newNode)
+
 			await this.setNode(newNode)
-			for await (const node of this.nodes(level, { key, inclusive: false }, null)) {
-				await this.updateNode(level + 1, null)
-				return
+			if (this.isBoundary(newNode)) {
+				await this.createParents(newNode.level, newNode.key)
 			}
 
-			await this.deleteStack(level + 1, null)
+			if (firstSibling.key == null) {
+				await this.updateAnchor(newNode.level + 1)
+			} else {
+				await this.update(newNode.level + 1, firstSibling.key)
+			}
+		}
+	}
+
+	private async replaceBoundary(node: Node) {
+		if (this.isBoundary(node)) {
+			await this.setNode(node)
+			await this.update(node.level + 1, node.key)
+		} else {
+			await this.setNode(node)
+			await this.deleteParents(node.level, node.key)
+
+			const firstSibling = await this.getFirstSibling(node)
+			if (firstSibling.key === null) {
+				await this.updateAnchor(node.level + 1)
+			} else {
+				await this.update(node.level + 1, firstSibling.key)
+			}
+		}
+	}
+
+	private async updateAnchor(level: number) {
+		const hash = await this.getHash(level, null)
+
+		await this.setNode({ level, key: null, hash })
+		for await (const node of this.nodes(level, { key: null, inclusive: false }, null)) {
+			await this.updateAnchor(level + 1)
 			return
 		}
 
-		const oldNode = await this.getNode(level, key)
-		assert(oldNode !== null)
-		if (this.isBoundary(oldNode.hash)) {
-			if (this.isBoundary(newNode.hash)) {
-				await this.setNode(newNode)
-				await this.updateNode(level + 1, key)
-			} else {
-				await this.deleteStack(level + 1, key)
-				await this.setNode(newNode)
-
-				const newParent = await this.getParent(level, key)
-				await this.updateNode(level + 1, newParent)
-			}
-		} else {
-			await this.dispatch(newNode)
-		}
+		await this.deleteParents(level, null)
 	}
 
-	private async deleteStack(level: number, key: Key) {
-		const node = await this.getNode(level, key)
+	private async deleteParents(level: number, key: Key) {
+		const node = await this.getNode(level + 1, key)
 		if (node !== null) {
-			await this.deleteNode(level, key)
-			await this.deleteStack(level + 1, key)
+			await this.deleteNode(level + 1, key)
+			await this.deleteParents(level + 1, key)
 		}
 	}
 
-	private async createStack(level: number, key: Key) {
-		assert(level > 0)
-		const hash = await this.getHash(level, key)
-		await this.setNode({ level, key, hash })
-		if (this.isBoundary(hash)) {
-			await this.createStack(level + 1, key)
+	private async createParents(level: number, key: Key) {
+		const hash = await this.getHash(level + 1, key)
+		const node: Node = { level: level + 1, key, hash }
+		await this.setNode(node)
+		if (this.isBoundary(node)) {
+			await this.createParents(level + 1, key)
 		}
 	}
 
-	private async getParent(level: number, key: Key): Promise<Key> {
-		assert(key !== null)
+	private async getFirstSibling(node: Node): Promise<Node> {
+		if (node.key === null) {
+			return node
+		}
 
-		for await (const node of this.nodes(level, null, { key, inclusive: true }, { reverse: true })) {
-			if (node.key === null || this.isBoundary(node.hash)) {
-				return node.key
+		const upperBound = { key: node.key, inclusive: true }
+		for await (const prev of this.nodes(node.level, null, upperBound, { reverse: true })) {
+			if (prev.key === null || this.isBoundary(prev)) {
+				return prev
 			}
 		}
 
 		throw new Error("Internal error")
+	}
+
+	private async getParent(node: Node): Promise<Node | null> {
+		const { level, key } = await this.getFirstSibling(node)
+		return await this.getNode(level + 1, key)
 	}
 
 	private async getHash(level: number, key: Key): Promise<Uint8Array> {
@@ -173,7 +184,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 
 		const hash = blake3.create({ dkLen: this.metadata.K })
 		for await (const node of this.nodes(level - 1, { key, inclusive: true })) {
-			if (lessThan(key, node.key) && this.isBoundary(node.hash)) {
+			if (lessThan(key, node.key) && this.isBoundary(node)) {
 				break
 			}
 
@@ -208,7 +219,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 
 		const children: Node[] = []
 		for await (const node of this.nodes(level - 1, { key, inclusive: true })) {
-			if (this.isBoundary(node.hash) && !equalKeys(node.key, key)) {
+			if (this.isBoundary(node) && !equalKeys(node.key, key)) {
 				break
 			} else {
 				children.push(node)
