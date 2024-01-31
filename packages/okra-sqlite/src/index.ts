@@ -2,8 +2,7 @@ import type * as sqlite from "better-sqlite3"
 import Database from "better-sqlite3"
 
 import { blake3 } from "@noble/hashes/blake3"
-import { Key, Node, lessThan } from "@canvas-js/okra"
-import { bytesToHex } from "@noble/hashes/utils"
+import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
@@ -11,23 +10,27 @@ export class Tree {
 	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
+	private readonly LIMIT_KEY: Uint8Array
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
 
 	private readonly db: sqlite.Database
 	private readonly statements: {
-		insert: sqlite.Statement
-		update: sqlite.Statement
-		delete: sqlite.Statement
-		select: sqlite.Statement
-		selectRange: sqlite.Statement
-		selectRangeReverse: sqlite.Statement
-		selectRoot: sqlite.Statement
+		insert: sqlite.Statement<{ level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }>
+		update: sqlite.Statement<{ level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }>
+		delete: sqlite.Statement<{ level: number; key: Uint8Array | null }>
+		select: sqlite.Statement<{ level: number; key: Uint8Array | null }>
+		selectRoot: sqlite.Statement<{}>
+		selectFirstSibling: sqlite.Statement<{ level: number; key: Uint8Array | null; limit: Uint8Array }>
+		selectChildren: sqlite.Statement<{ level: number; key: Uint8Array | null; limit: Uint8Array }>
+		selectAnchorSibling: sqlite.Statement<{ level: number }>
 	}
 
 	constructor(path: string | null = null, options: { K?: number; Q?: number } = {}) {
 		this.K = options.K ?? 16
 		this.Q = options.Q ?? 32
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
+		this.LIMIT_KEY = new Uint8Array(4)
+		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
 		this.LEAF_ANCHOR_HASH = blake3(new Uint8Array([]), { dkLen: this.K })
 
 		this.db = new Database(path ?? ":memory:")
@@ -47,20 +50,31 @@ export class Tree {
 			select: this.db.prepare(
 				`SELECT * FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
 			),
-			selectRange: this.db.prepare(
-				`SELECT * FROM nodes WHERE level = :level AND (:key ISNULL OR key >= :key) ORDER BY key ASC`
-			),
-			selectRangeReverse: this.db.prepare(
-				`SELECT * FROM nodes WHERE level = :level AND (key ISNULL OR key <= :key) ORDER BY key DESC`
-			),
+
 			selectRoot: this.db.prepare(`SELECT * FROM nodes ORDER BY level DESC LIMIT 1`),
+
+			selectFirstSibling: this.db.prepare(
+				`SELECT * FROM nodes WHERE level = :level AND (key ISNULL OR (key <= :key AND hash < :limit)) ORDER BY key DESC LIMIT 1`
+			),
+
+			selectChildren: this.db.prepare(
+				`SELECT * FROM nodes WHERE level = :level - 1 AND (:key ISNULL OR (key NOTNULL AND key >= :key)) AND (
+					key ISNULL OR key < (
+						SELECT key FROM nodes WHERE level = :level - 1 AND key NOTNULL AND (:key ISNULL OR key > :key) AND hash < :limit ORDER BY key LIMIT 1
+					) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = :level - 1 AND key NOTNULL AND (:key ISNULL OR key > :key) AND hash < :limit)
+				) ORDER BY key`
+			),
+
+			selectAnchorSibling: this.db.prepare(
+				`SELECT key FROM nodes WHERE level = :level AND key NOTNULL ORDER BY key LIMIT 1`
+			),
 		}
 
 		this.setNode({ level: 0, key: null, hash: this.LEAF_ANCHOR_HASH })
 	}
 
 	public getRoot(): Node {
-		const { level, key, hash } = this.statements.selectRoot.get() as NodeRecord
+		const { level, key, hash } = this.statements.selectRoot.get({}) as NodeRecord
 		return { level, key, hash }
 	}
 
@@ -139,18 +153,8 @@ export class Tree {
 		const hash = this.getHash(level, null)
 		this.setNode({ level, key: null, hash })
 
-		let terminate = true
-		for (const row of this.statements.selectRange.iterate({ level, key: null })) {
-			const node = row as Node
-			if (node.key === null) {
-				continue
-			} else {
-				terminate = false
-				break
-			}
-		}
-
-		if (terminate) {
+		const next = this.statements.selectAnchorSibling.get({ level }) as { key: Uint8Array } | undefined
+		if (next === undefined) {
 			this.deleteParents(level, null)
 		} else {
 			this.updateAnchor(level + 1)
@@ -179,26 +183,24 @@ export class Tree {
 			return node
 		}
 
-		for (const row of this.statements.selectRangeReverse.iterate({ level: node.level, key: node.key })) {
-			const node = row as Node
-			if (node.key === null || this.isBoundary(node)) {
-				return node
-			}
-		}
+		const firstSibling = this.statements.selectFirstSibling.get({
+			level: node.level,
+			key: node.key,
+			limit: this.LIMIT_KEY,
+		}) as NodeRecord | undefined
 
-		throw new Error("Internal error")
+		assert(firstSibling !== undefined, "expected firstSibling !== undefined")
+		const { level, key, hash } = firstSibling
+		return { level, key, hash }
 	}
 
 	private getHash(level: number, key: Key): Uint8Array {
 		const hash = blake3.create({ dkLen: this.K })
 
-		for (const row of this.statements.selectRange.iterate({ level: level - 1, key })) {
-			const node = row as Node
-			if (lessThan(key, node.key) && this.isBoundary(node)) {
-				break
-			}
+		const children = this.statements.selectChildren.all({ level, key, limit: this.LIMIT_KEY }) as { hash: Uint8Array }[]
 
-			hash.update(node.hash)
+		for (const child of children) {
+			hash.update(child.hash)
 		}
 
 		return hash.digest()
