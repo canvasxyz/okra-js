@@ -24,6 +24,13 @@ export class Tree {
 		)
 		await tree.client.query(`CREATE UNIQUE INDEX IF NOT EXISTS node_index ON nodes(level, key)`)
 
+		await tree.client.query(`
+DROP PROCEDURE IF EXISTS deletenode;
+CREATE OR REPLACE PROCEDURE deletenode(level_ INTEGER, key_ BYTEA) AS $$
+    DELETE FROM nodes WHERE level = level_ AND ((nodes.key ISNULL AND key_ ISNULL) OR (key = key_));
+$$ LANGUAGE SQL;
+`)
+
 		if (options.clear) {
 			await tree.client.query(`TRUNCATE nodes`)
 		}
@@ -220,10 +227,7 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 	}
 
 	private async deleteNode(level: number, key: Key) {
-		await this.client.query(
-			`DELETE FROM nodes WHERE level = $1 AND ((key ISNULL AND cast($2 as bytea) ISNULL) OR (key = $2))`,
-			[level, key],
-		)
+		await this.client.query(`CALL deletenode($1, cast($2 as bytea));`, [level, key])
 	}
 
 	private isBoundary({ hash }: Node) {
