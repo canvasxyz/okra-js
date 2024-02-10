@@ -2,18 +2,17 @@ import test, { ExecutionContext } from "ava"
 
 import pg from "pg"
 
-import { Builder } from "@canvas-js/okra"
-import { MemoryStore } from "@canvas-js/okra-memory"
-
 import { Tree } from "@canvas-js/okra-pg"
 import { blake3 } from "@noble/hashes/blake3"
 
-test("compare to builder(1000)", async (t) => {
+import { Tree as SqliteTree } from "@canvas-js/okra-sqlite"
+
+test("compare pg to sqlite(1000)", async (t) => {
 	const path = "postgresql://localhost:5432/test" // TODO
 	const client = new pg.Client(path)
 
-	const b = await Builder.open(new MemoryStore(), { K: 16, Q: 4 })
 	const tree = await Tree.initialize(client, { K: 16, Q: 4, clear: true })
+	const sqliteTree = new SqliteTree(null, { K: 16, Q: 4 })
 
 	const buffer = new ArrayBuffer(4)
 	const view = new DataView(buffer)
@@ -22,10 +21,10 @@ test("compare to builder(1000)", async (t) => {
 		const key = new Uint8Array(buffer, 0, 4)
 		const value = blake3(key, { dkLen: 4 })
 		await tree.set(key, value)
-		await b.set(key, value)
+		await sqliteTree.set(key, value)
 	}
 
-	t.deepEqual(await tree.getRoot(), await b.finalize())
+	t.deepEqual(await tree.getRoot(), sqliteTree.getRoot())
 
 	await client.end()
 
