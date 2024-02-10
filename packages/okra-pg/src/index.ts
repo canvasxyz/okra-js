@@ -5,6 +5,8 @@ import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
+const H = 16
+
 export class Tree {
 	private readonly K: number
 	private readonly Q: number
@@ -25,9 +27,19 @@ export class Tree {
 		await tree.client.query(`CREATE UNIQUE INDEX IF NOT EXISTS node_index ON nodes(level, key)`)
 
 		await tree.client.query(`
+DROP FUNCTION IF EXISTS getnode;
+CREATE OR REPLACE FUNCTION getnode(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
+    SELECT
+        (CASE WHEN value IS NULL THEN
+            (CASE WHEN hash IS NULL THEN ''::bytea ELSE hash END)
+        ELSE (CASE WHEN hash IS NULL THEN ''::bytea ELSE hash END) || value END)
+    FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
+$$ LANGUAGE SQL;`)
+
+		await tree.client.query(`
 DROP PROCEDURE IF EXISTS deletenode;
 CREATE OR REPLACE PROCEDURE deletenode(level_ INTEGER, key_ BYTEA) AS $$
-    DELETE FROM nodes WHERE level = level_ AND ((nodes.key ISNULL AND key_ ISNULL) OR (key = key_));
+    DELETE FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
 $$ LANGUAGE SQL;
 `)
 
@@ -197,18 +209,16 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 	}
 
 	private async getNode(level: number, key: Key): Promise<Node | null> {
-		const { rows } = await this.client.query(
-			`SELECT * FROM nodes WHERE level = $1 AND ((key ISNULL AND cast($2 as bytea) ISNULL) OR (key = $2))`,
-			[level, key],
-		)
-		const row = rows[0] as NodeRecord | undefined
+		const { rows } = await this.client.query(`SELECT getnode($1, $2)`, [level, key])
+		const row = rows[0]
 
-		if (row === undefined) {
+		if (row.getnode === null) {
 			return null
 		}
 
-		const { hash, value } = row
-		if (value === null) {
+		const hash = row.getnode.subarray(0, H)
+		const value = row.getnode.subarray(H)
+		if (value.length === 0) {
 			return { level, key, hash }
 		} else {
 			return { level, key, hash, value }
