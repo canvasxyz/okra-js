@@ -5,6 +5,7 @@ import { blake3 } from "@noble/hashes/blake3"
 import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
+type Hasher = (key: Uint8Array, value: Uint8Array) => Uint8Array
 
 export class Tree {
 	private readonly K: number
@@ -12,6 +13,7 @@ export class Tree {
 	private readonly LIMIT: number
 	private readonly LIMIT_KEY: Uint8Array
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
+	private readonly hasher?: Hasher
 
 	private readonly db: sqlite.Database
 	private readonly statements: {
@@ -25,9 +27,10 @@ export class Tree {
 		selectAnchorSibling: sqlite.Statement<{ level: number }>
 	}
 
-	constructor(path: string | null = null, options: { K?: number; Q?: number } = {}) {
+	constructor(path: string | null = null, options: { K?: number; Q?: number, hasher?: Hasher } = {}) {
 		this.K = options.K ?? 16
 		this.Q = options.Q ?? 32
+		if (options.hasher) this.hasher = options.hasher
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
@@ -42,19 +45,19 @@ export class Tree {
 		this.statements = {
 			insert: this.db.prepare(`INSERT INTO nodes VALUES (:level, :key, :hash, :value)`),
 			update: this.db.prepare(
-				`UPDATE nodes SET hash = :hash, value = :value WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
+				`UPDATE nodes SET hash = :hash, value = :value WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`,
 			),
 			delete: this.db.prepare(
-				`DELETE FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
+				`DELETE FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`,
 			),
 			select: this.db.prepare(
-				`SELECT * FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
+				`SELECT * FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`,
 			),
 
 			selectRoot: this.db.prepare(`SELECT * FROM nodes ORDER BY level DESC LIMIT 1`),
 
 			selectFirstSibling: this.db.prepare(
-				`SELECT * FROM nodes WHERE level = :level AND (key ISNULL OR (key <= :key AND hash < :limit)) ORDER BY key DESC LIMIT 1`
+				`SELECT * FROM nodes WHERE level = :level AND (key ISNULL OR (key <= :key AND hash < :limit)) ORDER BY key DESC LIMIT 1`,
 			),
 
 			selectChildren: this.db.prepare(
@@ -62,11 +65,11 @@ export class Tree {
 					key ISNULL OR key < (
 						SELECT key FROM nodes WHERE level = :level - 1 AND key NOTNULL AND (:key ISNULL OR key > :key) AND hash < :limit ORDER BY key LIMIT 1
 					) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = :level - 1 AND key NOTNULL AND (:key ISNULL OR key > :key) AND hash < :limit)
-				) ORDER BY key`
+				) ORDER BY key`,
 			),
 
 			selectAnchorSibling: this.db.prepare(
-				`SELECT key FROM nodes WHERE level = :level AND key NOTNULL ORDER BY key LIMIT 1`
+				`SELECT key FROM nodes WHERE level = :level AND key NOTNULL ORDER BY key LIMIT 1`,
 			),
 		}
 
@@ -241,6 +244,10 @@ export class Tree {
 	private static view = new DataView(Tree.size)
 
 	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
+		if (this.hasher) {
+			return this.hasher(key, value)
+		}
+
 		const hash = blake3.create({ dkLen: this.K })
 		Tree.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(Tree.size))

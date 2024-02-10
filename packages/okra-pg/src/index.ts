@@ -4,6 +4,7 @@ import { blake3 } from "@noble/hashes/blake3"
 import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
+type Hasher = (key: Uint8Array, value: Uint8Array) => Uint8Array
 
 const H = 16
 
@@ -13,16 +14,20 @@ export class Tree {
 	private readonly LIMIT: number
 	private readonly LIMIT_KEY: Uint8Array
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
+	private readonly hasher?: Hasher
 
 	private readonly client: pg.Client
 
-	public static async initialize(client: pg.Client, options: { K?: number; Q?: number; clear?: boolean } = {}) {
+	public static async initialize(client: pg.Client, options: { K?: number; Q?: number; clear?: boolean, hasher?: Hasher } = {}) {
 		const tree = new Tree(client, options)
 
 		await tree.client.connect()
 
 		await tree.client.query(
 			`CREATE TABLE IF NOT EXISTS nodes (level INTEGER NOT NULL, key BYTEA, hash BYTEA NOT NULL, value BYTEA)`,
+		)
+		await tree.client.query(
+			`CREATE TABLE IF NOT EXISTS oplist (operation INTEGER)`
 		)
 		await tree.client.query(`CREATE UNIQUE INDEX IF NOT EXISTS node_index ON nodes(level, key)`)
 
@@ -40,8 +45,7 @@ $$ LANGUAGE SQL;`)
 DROP PROCEDURE IF EXISTS deletenode;
 CREATE OR REPLACE PROCEDURE deletenode(level_ INTEGER, key_ BYTEA) AS $$
     DELETE FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
-$$ LANGUAGE SQL;
-`)
+$$ LANGUAGE SQL;`)
 
 		if (options.clear) {
 			await tree.client.query(`TRUNCATE nodes`)
@@ -52,10 +56,11 @@ $$ LANGUAGE SQL;
 		return tree
 	}
 
-	constructor(client: pg.Client, options: { K?: number; Q?: number } = {}) {
+	constructor(client: pg.Client, options: { K?: number; Q?: number, hasher?: Hasher } = {}) {
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
+		if (options.hasher) this.hasher = options.hasher
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
@@ -249,6 +254,9 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 	private static view = new DataView(Tree.size)
 
 	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
+		if (this.hasher) {
+			return this.hasher(key, value)
+		}
 		const hash = blake3.create({ dkLen: this.K })
 		Tree.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(Tree.size))
