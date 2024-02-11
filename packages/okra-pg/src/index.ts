@@ -18,34 +18,48 @@ export class Tree {
 
 	private readonly client: pg.Client
 
-	public static async initialize(client: pg.Client, options: { K?: number; Q?: number; clear?: boolean, hasher?: Hasher } = {}) {
+	public static async initialize(
+		client: pg.Client,
+		options: { K?: number; Q?: number; clear?: boolean; hasher?: Hasher } = {},
+	) {
 		const tree = new Tree(client, options)
 
 		await tree.client.connect()
 
-		await tree.client.query(
-			`CREATE TABLE IF NOT EXISTS nodes (level INTEGER NOT NULL, key BYTEA, hash BYTEA NOT NULL, value BYTEA)`,
-		)
-		await tree.client.query(
-			`CREATE TABLE IF NOT EXISTS oplist (operation INTEGER)`
-		)
-		await tree.client.query(`CREATE UNIQUE INDEX IF NOT EXISTS node_index ON nodes(level, key)`)
-
 		await tree.client.query(`
-DROP FUNCTION IF EXISTS getnode;
+CREATE TABLE IF NOT EXISTS nodes (level INTEGER NOT NULL, key BYTEA, hash BYTEA NOT NULL, value BYTEA);
+CREATE TABLE IF NOT EXISTS oplist (operation INTEGER);
+CREATE UNIQUE INDEX IF NOT EXISTS node_index ON nodes(level, key);
+
+DROP FUNCTION IF EXISTS getnode(INTEGER, BYTEA);
+
 CREATE OR REPLACE FUNCTION getnode(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
     SELECT
         (CASE WHEN value IS NULL THEN
             (CASE WHEN hash IS NULL THEN ''::bytea ELSE hash END)
         ELSE (CASE WHEN hash IS NULL THEN ''::bytea ELSE hash END) || value END)
     FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
-$$ LANGUAGE SQL;`)
+$$ LANGUAGE SQL;
 
-		await tree.client.query(`
-DROP PROCEDURE IF EXISTS deletenode;
+DROP PROCEDURE IF EXISTS setnode(INTEGER, BYTEA, BYTEA, BYTEA);
+
+CREATE OR REPLACE PROCEDURE setnode(level_ INTEGER, key_ BYTEA, hash_ BYTEA, value_ BYTEA) AS $$
+BEGIN
+		IF getnode(level_, key_) IS NULL THEN
+			INSERT INTO nodes VALUES (level_, key_, hash_, value_);
+		ELSE
+      UPDATE nodes SET hash = hash_, value = value_ WHERE level = level_ AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
+		END IF;
+    RETURN;
+END
+$$ LANGUAGE plpgsql;
+
+DROP PROCEDURE IF EXISTS deletenode(INTEGER, BYTEA);
+
 CREATE OR REPLACE PROCEDURE deletenode(level_ INTEGER, key_ BYTEA) AS $$
     DELETE FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
-$$ LANGUAGE SQL;`)
+$$ LANGUAGE SQL;
+`)
 
 		if (options.clear) {
 			await tree.client.query(`TRUNCATE nodes`)
@@ -56,7 +70,7 @@ $$ LANGUAGE SQL;`)
 		return tree
 	}
 
-	constructor(client: pg.Client, options: { K?: number; Q?: number, hasher?: Hasher } = {}) {
+	constructor(client: pg.Client, options: { K?: number; Q?: number; hasher?: Hasher } = {}) {
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
@@ -110,11 +124,28 @@ $$ LANGUAGE SQL;`)
 
 	private async replace(oldNode: Node | null, newNode: Node) {
 		if (oldNode !== null && this.isBoundary(oldNode)) {
-			await this.replaceBoundary(newNode)
+			if (this.isBoundary(newNode)) {
+				// old node is boundary, new node is boundary
+				await this.setNode(newNode)
+				await this.update(newNode.level + 1, newNode.key)
+			} else {
+				// old node is boundary, new node isn't boundary (merge)
+				await this.setNode(newNode)
+				await this.deleteParents(newNode.level, newNode.key)
+
+				const firstSibling = await this.getFirstSibling(newNode)
+				if (firstSibling.key === null) {
+					await this.updateAnchor(newNode.level + 1)
+				} else {
+					await this.update(newNode.level + 1, firstSibling.key)
+				}
+			}
 		} else {
 			const firstSibling = await this.getFirstSibling(newNode)
 
 			await this.setNode(newNode)
+
+			// old node isn't boundary, new node is boundary (split)
 			if (this.isBoundary(newNode)) {
 				await this.createParents(newNode.level, newNode.key)
 			}
@@ -123,23 +154,6 @@ $$ LANGUAGE SQL;`)
 				await this.updateAnchor(newNode.level + 1)
 			} else {
 				await this.update(newNode.level + 1, firstSibling.key)
-			}
-		}
-	}
-
-	private async replaceBoundary(node: Node) {
-		if (this.isBoundary(node)) {
-			await this.setNode(node)
-			await this.update(node.level + 1, node.key)
-		} else {
-			await this.setNode(node)
-			await this.deleteParents(node.level, node.key)
-
-			const firstSibling = await this.getFirstSibling(node)
-			if (firstSibling.key === null) {
-				await this.updateAnchor(node.level + 1)
-			} else {
-				await this.update(node.level + 1, firstSibling.key)
 			}
 		}
 	}
@@ -214,7 +228,7 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 	}
 
 	private async getNode(level: number, key: Key): Promise<Node | null> {
-		const { rows } = await this.client.query(`SELECT getnode($1, $2)`, [level, key])
+		const { rows } = await this.client.query(`SELECT getnode($1::integer, $2::bytea)`, [level, key])
 		const row = rows[0]
 
 		if (row.getnode === null) {
@@ -231,14 +245,7 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 	}
 
 	private async setNode({ level, key, hash, value }: Node) {
-		if ((await this.getNode(level, key)) === null) {
-			await this.client.query(`INSERT INTO nodes VALUES ($1, $2, $3, $4)`, [level, key, hash, value ?? null])
-		} else {
-			await this.client.query(
-				`UPDATE nodes SET hash = $1, value = $2 WHERE level = $3 AND ((key ISNULL AND cast($4 as bytea) ISNULL) OR (key = $4))`,
-				[hash, value ?? null, level, key],
-			)
-		}
+		await this.client.query(`CALL setnode($1, cast($2 as bytea), $3, $4);`, [level, key, hash, value])
 	}
 
 	private async deleteNode(level: number, key: Key) {
