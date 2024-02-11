@@ -1,4 +1,5 @@
 import test, { ExecutionContext } from "ava"
+import { text } from "node:stream/consumers"
 
 import pg from "pg"
 
@@ -16,13 +17,19 @@ test("compare pg to sqlite(1000)", async (t) => {
 
 	const buffer = new ArrayBuffer(4)
 	const view = new DataView(buffer)
-	for (let i = 0; i < 1000; i++) {
+	for (let i = 0; i < 10000; i++) {
 		view.setUint32(0, i)
 		const key = new Uint8Array(buffer, 0, 4)
 		const value = blake3(key, { dkLen: 4 })
 		await tree.set(key, value)
 		await sqliteTree.set(key, value)
 	}
+
+	console.log("pg:\n")
+	console.log(await text(tree.print()))
+
+	console.log("sqlite:\n")
+	console.log(await text(sqliteTree.print()))
 
 	t.deepEqual(await tree.getRoot(), sqliteTree.getRoot())
 

@@ -1,6 +1,7 @@
 import pg from "pg"
 
 import { blake3 } from "@noble/hashes/blake3"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
@@ -85,6 +86,30 @@ $$ LANGUAGE SQL;
 		const { rows } = await this.client.query(`SELECT * FROM nodes ORDER BY level DESC LIMIT 1`)
 		const { level, key, hash } = rows[0] as NodeRecord
 		return { level, key, hash }
+	}
+
+	public async getChildren(level: number, key: Key): Promise<Node[]> {
+		if (level === 0) {
+			throw new RangeError("Cannot get children of a leaf node")
+		}
+
+		const limit = this.LIMIT_KEY
+		const { rows } = await this.client.query(
+			`SELECT * FROM nodes WHERE level = $1 - 1 AND (cast($2 as bytea) ISNULL OR (key NOTNULL AND key >= $2)) AND (
+					key ISNULL OR key < (
+	SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3 ORDER BY key ASC NULLS FIRST LIMIT 1
+	) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3)
+				) ORDER BY key ASC NULLS FIRST`,
+			[level, key, limit],
+		)
+
+		return rows.map(({ level, key, hash, value }) => {
+			if (value === null || value.length === 0) {
+				return { level, key, hash }
+			} else {
+				return { level, key, hash, value }
+			}
+		})
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array) {
@@ -272,5 +297,41 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 		hash.update(new Uint8Array(Tree.size))
 		hash.update(value)
 		return hash.digest()
+	}
+
+	public async *print(options: { hashSize?: number } = {}): AsyncIterableIterator<Uint8Array> {
+		const hashSize = options.hashSize ?? 4
+		const slot = "  ".repeat(hashSize)
+		const hash = ({ hash }: Node) => hex(hash.subarray(0, hashSize))
+		const encoder = new TextEncoder()
+
+		const tree = this
+		async function* printTree(prefix: string, bullet: string, node: Node): AsyncIterableIterator<Uint8Array> {
+			yield encoder.encode(bullet)
+			yield encoder.encode(` ${hash(node)} `)
+			if (node.level === 0) {
+				if (node.key === null) {
+					yield encoder.encode(`│\n`)
+				} else {
+					yield encoder.encode(`│ ${hex(node.key)}\n`)
+				}
+			} else {
+				const children = await tree.getChildren(node.level, node.key)
+				for (const [i, child] of children.entries()) {
+					if (i > 0) {
+						yield encoder.encode(prefix)
+					}
+
+					if (i < children.length - 1) {
+						yield* printTree(prefix + "│   " + slot, i === 0 ? "┬─" : "├─", child)
+					} else {
+						yield* printTree(prefix + "    " + slot, i === 0 ? "──" : "└─", child)
+					}
+				}
+			}
+		}
+
+		const root = await this.getRoot()
+		yield* printTree("    " + slot, "──", root)
 	}
 }
