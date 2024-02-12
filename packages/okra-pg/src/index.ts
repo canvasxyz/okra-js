@@ -67,7 +67,8 @@ CREATE OR REPLACE FUNCTION isboundary(level_ INTEGER, key_ BYTEA) RETURNS boolea
 SELECT hash < decode('${hex(
 			tree.LIMIT_KEY,
 		)}', 'hex') FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
-		$$ LANGUAGE SQL;`)
+$$ LANGUAGE SQL;
+`)
 
 		if (options.clear) {
 			await tree.client.query(`TRUNCATE nodes`)
@@ -143,15 +144,10 @@ SELECT hash < decode('${hex(
 		if (firstSibling.key === null) {
 			await this.updateAnchor(1)
 		} else {
-			await this.update(1, firstSibling.key)
+			const oldNode = await this.getNode(1, firstSibling.key)
+			const hash = await this.getHash(1, firstSibling.key)
+			await this.replace(oldNode, { level: 1, key: firstSibling.key, hash })
 		}
-	}
-
-	private async update(level: number, key: Key) {
-		const oldNode = await this.getNode(level, key)
-		const hash = await this.getHash(level, key)
-		const newNode: Node = { level, key, hash }
-		await this.replace(oldNode, newNode)
 	}
 
 	private async replace(oldNode: Node | null, newNode: Node) {
@@ -159,7 +155,9 @@ SELECT hash < decode('${hex(
 			if (await this.isBoundary(newNode)) {
 				// old node is boundary, new node is boundary
 				await this.setNode(newNode)
-				await this.update(newNode.level + 1, newNode.key)
+				const oldNode = await this.getNode(newNode.level + 1, newNode.key)
+				const hash = await this.getHash(newNode.level + 1, newNode.key)
+				await this.replace(oldNode, { level: newNode.level + 1, key: newNode.key, hash })
 			} else {
 				// old node is boundary, new node isn't boundary (merge)
 				await this.setNode(newNode)
@@ -169,7 +167,9 @@ SELECT hash < decode('${hex(
 				if (firstSibling.key === null) {
 					await this.updateAnchor(newNode.level + 1)
 				} else {
-					await this.update(newNode.level + 1, firstSibling.key)
+					const oldNode = await this.getNode(newNode.level + 1, firstSibling.key)
+					const hash = await this.getHash(newNode.level + 1, firstSibling.key)
+					await this.replace(oldNode, { level: newNode.level + 1, key: firstSibling.key, hash })
 				}
 			}
 		} else {
@@ -185,7 +185,9 @@ SELECT hash < decode('${hex(
 			if (firstSibling.key == null) {
 				await this.updateAnchor(newNode.level + 1)
 			} else {
-				await this.update(newNode.level + 1, firstSibling.key)
+				const oldNode = await this.getNode(newNode.level + 1, firstSibling.key)
+				const hash = await this.getHash(newNode.level + 1, firstSibling.key)
+				await this.replace(oldNode, { level: newNode.level + 1, key: firstSibling.key, hash })
 			}
 		}
 	}
