@@ -17,7 +17,7 @@ test("compare pg to sqlite(1000)", async (t) => {
 
 	const buffer = new ArrayBuffer(4)
 	const view = new DataView(buffer)
-	for (let i = 0; i < 10000; i++) {
+	for (let i = 0; i < 1000; i++) {
 		view.setUint32(0, i)
 		const key = new Uint8Array(buffer, 0, 4)
 		const value = blake3(key, { dkLen: 4 })
