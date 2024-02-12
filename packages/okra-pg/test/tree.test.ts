@@ -3,17 +3,19 @@ import { text } from "node:stream/consumers"
 
 import pg from "pg"
 
-import { Tree } from "@canvas-js/okra-pg"
+import { Blake3Hasher, Tree } from "@canvas-js/okra-pg"
 import { blake3 } from "@noble/hashes/blake3"
 
-import { Tree as SqliteTree } from "@canvas-js/okra-sqlite"
+import { Blake3Hasher as SqliteBlake3Hasher, Tree as SqliteTree } from "@canvas-js/okra-sqlite"
 
 test("compare pg to sqlite(1000)", async (t) => {
 	const path = "postgresql://localhost:5432/test" // TODO
 	const client = new pg.Client(path)
 
-	const tree = await Tree.initialize(client, { K: 16, Q: 4, clear: true })
-	const sqliteTree = new SqliteTree(null, { K: 16, Q: 4 })
+	const hasher = new Blake3Hasher({ size: new ArrayBuffer(4), K: 16 })
+	const tree = await Tree.initialize(client, { K: 16, Q: 4, clear: true, hasher })
+	const sqliteHasher = new SqliteBlake3Hasher({ size: new ArrayBuffer(4), K: 16 })
+	const sqliteTree = new SqliteTree(null, { K: 16, Q: 4, hasher: sqliteHasher })
 
 	const buffer = new ArrayBuffer(4)
 	const view = new DataView(buffer)
@@ -28,8 +30,8 @@ test("compare pg to sqlite(1000)", async (t) => {
 	console.log("pg:\n")
 	console.log(await text(tree.print()))
 
-	console.log("sqlite:\n")
-	console.log(await text(sqliteTree.print()))
+	// console.log("sqlite:\n")
+	// console.log(await text(sqliteTree.print()))
 
 	t.deepEqual(await tree.getRoot(), sqliteTree.getRoot())
 

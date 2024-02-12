@@ -5,9 +5,39 @@ import { bytesToHex as hex } from "@noble/hashes/utils"
 import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
-type Hasher = (key: Uint8Array, value: Uint8Array) => Uint8Array
 
 const H = 16
+
+abstract class Hasher {
+	protected readonly size: ArrayBuffer
+	protected readonly K: number
+	protected readonly view: DataView
+
+	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
+		this.size = size
+		this.K = K
+		this.view = new DataView(size)
+	}
+
+	abstract hash(key: Uint8Array, value: Uint8Array): Uint8Array
+}
+
+export class Blake3Hasher extends Hasher {
+	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
+		super({ size, K })
+	}
+
+	hash(key: Uint8Array, value: Uint8Array): Uint8Array {
+		const hash = blake3.create({ dkLen: this.K })
+		this.view.setUint32(0, key.length)
+		hash.update(new Uint8Array(this.size))
+		hash.update(key)
+		this.view.setUint32(0, value.length)
+		hash.update(new Uint8Array(this.size))
+		hash.update(value)
+		return hash.digest()
+	}
+}
 
 export class Tree {
 	private readonly K: number
@@ -309,8 +339,9 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 
 	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
 		if (this.hasher) {
-			return this.hasher(key, value)
+			return this.hasher.hash(key, value)
 		}
+
 		const hash = blake3.create({ dkLen: this.K })
 		Tree.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(Tree.size))
