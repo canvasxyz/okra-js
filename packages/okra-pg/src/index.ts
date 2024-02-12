@@ -315,19 +315,18 @@ $$ LANGUAGE SQL;
 	private async getHash(level: number, key: Key): Promise<Uint8Array> {
 		const limit = this.LIMIT_KEY
 		const { rows } = await this.client.query(
-			`SELECT * FROM nodes WHERE level = $1 - 1 AND (cast($2 as bytea) ISNULL OR (key NOTNULL AND key >= $2)) AND (
+			`
+SELECT sha256(string_agg(hash, '')) FROM (
+    SELECT hash FROM nodes WHERE level = $1 - 1 AND (cast($2 as bytea) ISNULL OR (key NOTNULL AND key >= $2)) AND (
 				key ISNULL OR key < (
-SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3 ORDER BY key ASC NULLS FIRST LIMIT 1
-) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3)
-			) ORDER BY key ASC NULLS FIRST`,
+            SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3 ORDER BY key ASC NULLS FIRST LIMIT 1
+            ) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3)
+    ) ORDER BY key ASC NULLS FIRST
+) children`,
 			[level, key, limit],
 		)
-		const children = rows as { hash: Uint8Array }[]
-
-		if (!this.hasher) {
-			throw new Error("hasher expected!")
-		}
-		return this.hasher.hashChildren(children)
+		const row = rows[0]
+		return row.sha256
 	}
 
 	private async getNode(level: number, key: Key): Promise<Node | null> {
