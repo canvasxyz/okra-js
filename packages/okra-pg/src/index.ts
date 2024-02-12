@@ -60,7 +60,14 @@ DROP PROCEDURE IF EXISTS deletenode(INTEGER, BYTEA);
 CREATE OR REPLACE PROCEDURE deletenode(level_ INTEGER, key_ BYTEA) AS $$
     DELETE FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
 $$ LANGUAGE SQL;
-`)
+
+DROP FUNCTION IF EXISTS isboundary(INTEGER, BYTEA);
+
+CREATE OR REPLACE FUNCTION isboundary(level_ INTEGER, key_ BYTEA) RETURNS boolean AS $$
+SELECT hash < decode('${hex(
+			tree.LIMIT_KEY,
+		)}', 'hex') FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
+		$$ LANGUAGE SQL;`)
 
 		if (options.clear) {
 			await tree.client.query(`TRUNCATE nodes`)
@@ -126,7 +133,7 @@ $$ LANGUAGE SQL;
 			return
 		}
 
-		if (node.key !== null && this.isBoundary(node)) {
+		if (node.key !== null && (await this.isBoundary(node))) {
 			this.deleteParents(0, key)
 		}
 
@@ -148,8 +155,8 @@ $$ LANGUAGE SQL;
 	}
 
 	private async replace(oldNode: Node | null, newNode: Node) {
-		if (oldNode !== null && this.isBoundary(oldNode)) {
-			if (this.isBoundary(newNode)) {
+		if (oldNode !== null && (await this.isBoundary(oldNode))) {
+			if (await this.isBoundary(newNode)) {
 				// old node is boundary, new node is boundary
 				await this.setNode(newNode)
 				await this.update(newNode.level + 1, newNode.key)
@@ -171,7 +178,7 @@ $$ LANGUAGE SQL;
 			await this.setNode(newNode)
 
 			// old node isn't boundary, new node is boundary (split)
-			if (this.isBoundary(newNode)) {
+			if (await this.isBoundary(newNode)) {
 				await this.createParents(newNode.level, newNode.key)
 			}
 
@@ -210,7 +217,7 @@ $$ LANGUAGE SQL;
 		const hash = await this.getHash(level + 1, key)
 		const node: Node = { level: level + 1, key, hash }
 		await this.setNode(node)
-		if (this.isBoundary(node)) {
+		if (await this.isBoundary(node)) {
 			await this.createParents(level + 1, key)
 		}
 	}
@@ -277,9 +284,14 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 		await this.client.query(`CALL deletenode($1, cast($2 as bytea));`, [level, key])
 	}
 
-	private isBoundary({ hash }: Node) {
+	private async isBoundary({ hash, level, key }: Node) {
 		const view = new DataView(hash.buffer, hash.byteOffset, hash.byteLength)
 		return view.getUint32(0) < this.LIMIT
+
+		const { rows } = await this.client.query(`CALL isboundary($1, cast($2 as bytea));`, [level, key])
+		const row = rows[0]
+
+		return row.isboundary
 	}
 
 	private static size = new ArrayBuffer(4)
