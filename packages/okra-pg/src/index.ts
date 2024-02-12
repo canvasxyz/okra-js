@@ -155,6 +155,13 @@ SELECT sha256(string_agg(hash, '')) FROM (
     ) ORDER BY key ASC NULLS FIRST
 ) children
 $$ LANGUAGE SQL;
+
+DROP FUNCTION IF EXISTS getfirstsibling(INTEGER, BYTEA, BYTEA);
+
+-- TODO: return self if getfirstsibling is called on an anchor node
+CREATE OR REPLACE FUNCTION getfirstsibling(level_ INTEGER, key_ BYTEA, limit_key BYTEA) RETURNS TABLE(level INTEGER, key BYTEA, hash BYTEA) AS $$
+    SELECT level, key, hash FROM nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < limit_key)) ORDER BY key DESC NULLS LAST LIMIT 1
+$$ LANGUAGE SQL;
 `)
 
 		if (options.clear) {
@@ -309,13 +316,10 @@ $$ LANGUAGE SQL;
 	}
 
 	private async getFirstSibling(node: Node): Promise<Node> {
-		if (node.key === null) {
-			return node
-		}
-
+		const limit = this.LIMIT_KEY
 		const { rows } = await this.client.query(
-			`SELECT * FROM nodes WHERE level = $1 AND (key ISNULL OR (key <= $2 AND hash < $3)) ORDER BY key DESC NULLS LAST LIMIT 1`,
-			[node.level, node.key, this.LIMIT_KEY],
+			`SELECT level, key, hash FROM getfirstsibling($1::integer, $2::bytea, $3::bytea)`,
+			[node.level, node.key, limit],
 		)
 		const firstSibling = rows[0] as NodeRecord | undefined
 
