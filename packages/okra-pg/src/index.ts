@@ -20,7 +20,8 @@ abstract class Hasher {
 		this.view = new DataView(size)
 	}
 
-	abstract hash(key: Uint8Array, value: Uint8Array): Uint8Array
+	abstract hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array
+	abstract hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array
 }
 
 export class Blake3Hasher extends Hasher {
@@ -28,7 +29,7 @@ export class Blake3Hasher extends Hasher {
 		super({ size, K })
 	}
 
-	hash(key: Uint8Array, value: Uint8Array): Uint8Array {
+	hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
 		const hash = blake3.create({ dkLen: this.K })
 		this.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(this.size))
@@ -38,6 +39,14 @@ export class Blake3Hasher extends Hasher {
 		hash.update(value)
 		return hash.digest()
 	}
+
+	hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array {
+		const hash = blake3.create({ dkLen: this.K })
+		for (const child of children) {
+			hash.update(child.hash)
+		}
+		return hash.digest()
+	}
 }
 
 export class Sha256Hasher extends Hasher {
@@ -45,7 +54,7 @@ export class Sha256Hasher extends Hasher {
 		super({ size, K })
 	}
 
-	hash(key: Uint8Array, value: Uint8Array): Uint8Array {
+	hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
 		const hash = sha256.create()
 		this.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(this.size))
@@ -53,6 +62,14 @@ export class Sha256Hasher extends Hasher {
 		this.view.setUint32(0, value.length)
 		hash.update(new Uint8Array(this.size))
 		hash.update(value)
+		return hash.digest()
+	}
+
+	hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array {
+		const hash = sha256.create()
+		for (const child of children) {
+			hash.update(child.hash)
+		}
 		return hash.digest()
 	}
 }
@@ -142,10 +159,11 @@ $$ LANGUAGE SQL;
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
 		if (options.hasher) this.hasher = options.hasher
+		if (!this.hasher) throw new Error("hasher expected!")
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
-		this.LEAF_ANCHOR_HASH = blake3(new Uint8Array([]), { dkLen: this.K })
+		this.LEAF_ANCHOR_HASH = this.hasher.hashChildren([])
 	}
 
 	public async getRoot(): Promise<Node> {
@@ -295,8 +313,6 @@ $$ LANGUAGE SQL;
 	}
 
 	private async getHash(level: number, key: Key): Promise<Uint8Array> {
-		const hash = blake3.create({ dkLen: this.K })
-
 		const limit = this.LIMIT_KEY
 		const { rows } = await this.client.query(
 			`SELECT * FROM nodes WHERE level = $1 - 1 AND (cast($2 as bytea) ISNULL OR (key NOTNULL AND key >= $2)) AND (
@@ -308,11 +324,10 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 		)
 		const children = rows as { hash: Uint8Array }[]
 
-		for (const child of children) {
-			hash.update(child.hash)
+		if (!this.hasher) {
+			throw new Error("hasher expected!")
 		}
-
-		return hash.digest()
+		return this.hasher.hashChildren(children)
 	}
 
 	private async getNode(level: number, key: Key): Promise<Node | null> {
@@ -351,17 +366,9 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 
 	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
 		if (this.hasher) {
-			return this.hasher.hash(key, value)
+			return this.hasher.hashEntry(key, value)
 		}
-
-		const hash = blake3.create({ dkLen: this.K })
-		Tree.view.setUint32(0, key.length)
-		hash.update(new Uint8Array(Tree.size))
-		hash.update(key)
-		Tree.view.setUint32(0, value.length)
-		hash.update(new Uint8Array(Tree.size))
-		hash.update(value)
-		return hash.digest()
+		throw new Error("hasher expected!")
 	}
 
 	public async *print(options: { hashSize?: number } = {}): AsyncIterableIterator<Uint8Array> {
