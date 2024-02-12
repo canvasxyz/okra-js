@@ -141,9 +141,11 @@ $$ LANGUAGE plpgsql;
 DROP PROCEDURE IF EXISTS createparents(INTEGER, BYTEA, BYTEA);
 
 CREATE OR REPLACE PROCEDURE createparents(level_ INTEGER, key_ BYTEA, limit_key BYTEA) AS $$
+DECLARE
+    hash_ bytea := gethash(level_ + 1, key_, limit_key);
 BEGIN
-    CALL setnode(level_ + 1, key_, gethash(level_ + 1, key_, limit_key), cast(null as bytea));
-    IF isboundary(gethash(level_ + 1, key_, limit_key)) THEN
+    CALL setnode(level_ + 1, key_, hash_, cast(null as bytea));
+    IF isboundary(hash_) THEN
       CALL createparents(level_ + 1, key_, limit_key);
     END IF;
 END
@@ -177,8 +179,10 @@ $$ LANGUAGE SQL;
 DROP PROCEDURE IF EXISTS updateanchor(INTEGER, BYTEA);
 
 CREATE OR REPLACE PROCEDURE updateanchor(level_ INTEGER, limit_key BYTEA) AS $$
+DECLARE
+    hash_ bytea := gethash(cast($1 as integer), cast(null as bytea), $2);
 BEGIN
-    CALL setnode(cast($1 as integer), cast(null as bytea), gethash(cast($1 as integer), cast(null as bytea), $2), cast(null as bytea));
+    CALL setnode(cast($1 as integer), cast(null as bytea), hash_, cast(null as bytea));
     IF (SELECT COUNT(*) = 0 FROM (SELECT * FROM nodes WHERE level = level_ AND key NOTNULL ORDER BY key LIMIT 1) sq) THEN
         CALL deleteparents(level_, null);
     ELSE
