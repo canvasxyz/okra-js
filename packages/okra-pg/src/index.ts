@@ -162,6 +162,19 @@ DROP FUNCTION IF EXISTS getfirstsibling(INTEGER, BYTEA, BYTEA);
 CREATE OR REPLACE FUNCTION getfirstsibling(level_ INTEGER, key_ BYTEA, limit_key BYTEA) RETURNS TABLE(level INTEGER, key BYTEA, hash BYTEA) AS $$
     SELECT level, key, hash FROM nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < limit_key)) ORDER BY key DESC NULLS LAST LIMIT 1
 $$ LANGUAGE SQL;
+
+DROP PROCEDURE IF EXISTS updateanchor(INTEGER, BYTEA);
+
+CREATE OR REPLACE PROCEDURE updateanchor(level_ INTEGER, limit_key BYTEA) AS $$
+BEGIN
+    CALL setnode(cast($1 as integer), cast(null as bytea), gethash(cast($1 as integer), cast(null as bytea), $2), cast(null as bytea));
+    IF (SELECT COUNT(*) = 0 FROM (SELECT * FROM nodes WHERE level = level_ AND key NOTNULL ORDER BY key LIMIT 1) sq) THEN
+        CALL deleteparents(level_, null);
+    ELSE
+        CALL updateanchor(level_ + 1, limit_key);
+    END IF;
+END
+$$ LANGUAGE plpgsql;
 `)
 
 		if (options.clear) {
@@ -288,18 +301,8 @@ $$ LANGUAGE SQL;
 	}
 
 	private async updateAnchor(level: number) {
-		const hash = await this.getHash(level, null)
-		await this.setNode({ level, key: null, hash })
-
-		const { rows } = await this.client.query(
-			`SELECT key FROM nodes WHERE level = $1 AND key NOTNULL ORDER BY key LIMIT 1`,
-			[level],
-		)
-		if (rows.length === 0) {
-			await this.deleteParents(level, null)
-		} else {
-			await this.updateAnchor(level + 1)
-		}
+		const limit = this.LIMIT_KEY
+		await this.client.query(`CALL updateanchor($1, $2);`, [level, limit])
 	}
 
 	private async deleteParents(level: number, key: Key) {
