@@ -248,20 +248,22 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async delete(key: Uint8Array) {
+		const limit = this.LIMIT_KEY
+
 		const node = await this.getNode(0, key)
 		if (node === null) {
 			return
 		}
 
 		if (node.key !== null && (await this.isBoundary(node))) {
-			this.deleteParents(0, key)
+			await this.client.query(`CALL deleteparents($1, cast($2 as bytea));`, [0, key])
 		}
 
-		this.deleteNode(0, key)
+		await this.client.query(`CALL deletenode($1, cast($2 as bytea));`, [0, key])
 
 		const firstSibling = await this.getFirstSibling(node)
 		if (firstSibling.key === null) {
-			await this.updateAnchor(1)
+			await this.client.query(`CALL updateanchor($1, $2);`, [1, limit])
 		} else {
 			const oldNode = await this.getNode(1, firstSibling.key)
 			const hash = await this.getHash(1, firstSibling.key)
@@ -270,6 +272,8 @@ $$ LANGUAGE plpgsql;
 	}
 
 	private async replace(oldNode: Node | null, newNode: Node) {
+		const limit = this.LIMIT_KEY
+
 		if (oldNode !== null && (await this.isBoundary(oldNode))) {
 			if (await this.isBoundary(newNode)) {
 				// old node is boundary, new node is boundary
@@ -280,11 +284,12 @@ $$ LANGUAGE plpgsql;
 			} else {
 				// old node is boundary, new node isn't boundary (merge)
 				await this.setNode(newNode)
-				await this.deleteParents(newNode.level, newNode.key)
+
+				await this.client.query(`CALL deleteparents($1, cast($2 as bytea));`, [newNode.level, newNode.key])
 
 				const firstSibling = await this.getFirstSibling(newNode)
 				if (firstSibling.key === null) {
-					await this.updateAnchor(newNode.level + 1)
+					await this.client.query(`CALL updateanchor($1, $2);`, [newNode.level + 1, limit])
 				} else {
 					const oldNode = await this.getNode(newNode.level + 1, firstSibling.key)
 					const hash = await this.getHash(newNode.level + 1, firstSibling.key)
@@ -298,31 +303,17 @@ $$ LANGUAGE plpgsql;
 
 			// old node isn't boundary, new node is boundary (split)
 			if (await this.isBoundary(newNode)) {
-				await this.createParents(newNode.level, newNode.key)
+				await this.client.query(`CALL createparents($1, cast($2 as bytea), $3);`, [newNode.level, newNode.key, limit])
 			}
 
 			if (firstSibling.key == null) {
-				await this.updateAnchor(newNode.level + 1)
+				await this.client.query(`CALL updateanchor($1, $2);`, [newNode.level + 1, limit])
 			} else {
 				const oldNode = await this.getNode(newNode.level + 1, firstSibling.key)
 				const hash = await this.getHash(newNode.level + 1, firstSibling.key)
 				await this.replace(oldNode, { level: newNode.level + 1, key: firstSibling.key, hash })
 			}
 		}
-	}
-
-	private async updateAnchor(level: number) {
-		const limit = this.LIMIT_KEY
-		await this.client.query(`CALL updateanchor($1, $2);`, [level, limit])
-	}
-
-	private async deleteParents(level: number, key: Key) {
-		await this.client.query(`CALL deleteparents($1, cast($2 as bytea));`, [level, key])
-	}
-
-	private async createParents(level: number, key: Key) {
-		const limit = this.LIMIT_KEY
-		await this.client.query(`CALL createparents($1, cast($2 as bytea), $3);`, [level, key, limit])
 	}
 
 	private async getFirstSibling(node: Node): Promise<Node> {
@@ -364,10 +355,6 @@ $$ LANGUAGE plpgsql;
 
 	private async setNode({ level, key, hash, value }: Node) {
 		await this.client.query(`CALL setnode($1, cast($2 as bytea), $3, $4);`, [level, key, hash, value])
-	}
-
-	private async deleteNode(level: number, key: Key) {
-		await this.client.query(`CALL deletenode($1, cast($2 as bytea));`, [level, key])
 	}
 
 	private async isBoundary({ hash }: Node) {
