@@ -51,7 +51,6 @@ BEGIN
 		ELSE
       UPDATE nodes SET hash = hash_, value = value_ WHERE level = level_ AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
 		END IF;
-    RETURN;
 END
 $$ LANGUAGE plpgsql;
 
@@ -60,6 +59,19 @@ DROP PROCEDURE IF EXISTS deletenode(INTEGER, BYTEA);
 CREATE OR REPLACE PROCEDURE deletenode(level_ INTEGER, key_ BYTEA) AS $$
     DELETE FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
 $$ LANGUAGE SQL;
+
+DROP PROCEDURE IF EXISTS deleteparents(level_ INTEGER, key_ BYTEA);
+
+CREATE OR REPLACE PROCEDURE deleteparents(level_ INTEGER, key_ BYTEA) AS $$
+BEGIN
+		IF getnode(level_ + 1, key_) IS NULL THEN
+      RETURN;
+		ELSE
+      CALL deletenode(level_ + 1, key_);
+      CALL deleteparents(level_ + 1, key_);
+    END IF;
+END
+$$ LANGUAGE plpgsql;
 
 DROP FUNCTION IF EXISTS isboundary(INTEGER, BYTEA);
 
@@ -208,11 +220,7 @@ $$ LANGUAGE SQL;
 	}
 
 	private async deleteParents(level: number, key: Key) {
-		const node = await this.getNode(level + 1, key)
-		if (node !== null) {
-			await this.deleteNode(level + 1, key)
-			await this.deleteParents(level + 1, key)
-		}
+		await this.client.query(`CALL deleteparents($1, cast($2 as bytea));`, [level, key])
 	}
 
 	private async createParents(level: number, key: Key) {
