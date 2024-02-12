@@ -121,12 +121,10 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-DROP FUNCTION IF EXISTS isboundary(INTEGER, BYTEA);
+DROP FUNCTION IF EXISTS isboundary(BYTEA);
 
-CREATE OR REPLACE FUNCTION isboundary(level_ INTEGER, key_ BYTEA) RETURNS boolean AS $$
-SELECT hash < decode('${hex(
-			tree.LIMIT_KEY,
-		)}', 'hex') FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
+CREATE OR REPLACE FUNCTION isboundary(hash BYTEA) RETURNS boolean AS $$
+SELECT hash < decode('${hex(tree.LIMIT_KEY)}', 'hex');
 $$ LANGUAGE SQL;
 `)
 
@@ -342,13 +340,9 @@ SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea
 		await this.client.query(`CALL deletenode($1, cast($2 as bytea));`, [level, key])
 	}
 
-	private async isBoundary({ hash, level, key }: Node) {
-		const view = new DataView(hash.buffer, hash.byteOffset, hash.byteLength)
-		return view.getUint32(0) < this.LIMIT
-
-		const { rows } = await this.client.query(`CALL isboundary($1, cast($2 as bytea));`, [level, key])
+	private async isBoundary({ hash }: Node) {
+		const { rows } = await this.client.query(`SELECT isboundary(cast ($1 as bytea));`, [hash])
 		const row = rows[0]
-
 		return row.isboundary
 	}
 
