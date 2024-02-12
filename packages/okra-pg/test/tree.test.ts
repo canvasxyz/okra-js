@@ -3,18 +3,22 @@ import { text } from "node:stream/consumers"
 
 import pg from "pg"
 
-import { Blake3Hasher, Tree } from "@canvas-js/okra-pg"
+import { Sha256Hasher, Blake3Hasher, Tree } from "@canvas-js/okra-pg"
 import { blake3 } from "@noble/hashes/blake3"
 
-import { Blake3Hasher as SqliteBlake3Hasher, Tree as SqliteTree } from "@canvas-js/okra-sqlite"
+import {
+	Sha256Hasher as SqliteSha256Hasher,
+	Blake3Hasher as SqliteBlake3Hasher,
+	Tree as SqliteTree,
+} from "@canvas-js/okra-sqlite"
 
 test("compare pg to sqlite(1000)", async (t) => {
 	const path = "postgresql://localhost:5432/test" // TODO
 	const client = new pg.Client(path)
 
-	const hasher = new Blake3Hasher({ size: new ArrayBuffer(4), K: 16 })
+	const hasher = new Sha256Hasher({ size: new ArrayBuffer(4), K: 16 })
 	const tree = await Tree.initialize(client, { K: 16, Q: 4, clear: true, hasher })
-	const sqliteHasher = new SqliteBlake3Hasher({ size: new ArrayBuffer(4), K: 16 })
+	const sqliteHasher = new SqliteSha256Hasher({ size: new ArrayBuffer(4), K: 16 })
 	const sqliteTree = new SqliteTree(null, { K: 16, Q: 4, hasher: sqliteHasher })
 
 	const buffer = new ArrayBuffer(4)

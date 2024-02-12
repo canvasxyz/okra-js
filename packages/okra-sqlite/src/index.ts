@@ -2,6 +2,7 @@ import type * as sqlite from "better-sqlite3"
 import Database from "better-sqlite3"
 
 import { blake3 } from "@noble/hashes/blake3"
+import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 import { Key, Node, assert } from "@canvas-js/okra"
 
@@ -28,6 +29,23 @@ export class Blake3Hasher extends Hasher {
 
 	hash(key: Uint8Array, value: Uint8Array): Uint8Array {
 		const hash = blake3.create({ dkLen: this.K })
+		this.view.setUint32(0, key.length)
+		hash.update(new Uint8Array(this.size))
+		hash.update(key)
+		this.view.setUint32(0, value.length)
+		hash.update(new Uint8Array(this.size))
+		hash.update(value)
+		return hash.digest()
+	}
+}
+
+export class Sha256Hasher extends Hasher {
+	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
+		super({ size, K })
+	}
+
+	hash(key: Uint8Array, value: Uint8Array): Uint8Array {
+		const hash = sha256.create()
 		this.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(this.size))
 		hash.update(key)
