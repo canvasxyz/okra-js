@@ -138,6 +138,17 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
+DROP PROCEDURE IF EXISTS createparents(INTEGER, BYTEA, BYTEA);
+
+CREATE OR REPLACE PROCEDURE createparents(level_ INTEGER, key_ BYTEA, limit_key BYTEA) AS $$
+BEGIN
+    CALL setnode(level_ + 1, key_, gethash(level_ + 1, key_, limit_key), cast(null as bytea));
+    IF isboundary(gethash(level_ + 1, key_, limit_key)) THEN
+      CALL createparents(level_ + 1, key_, limit_key);
+    END IF;
+END
+$$ LANGUAGE plpgsql;
+
 DROP FUNCTION IF EXISTS isboundary(BYTEA);
 
 CREATE OR REPLACE FUNCTION isboundary(hash BYTEA) RETURNS boolean AS $$
@@ -310,12 +321,8 @@ $$ LANGUAGE plpgsql;
 	}
 
 	private async createParents(level: number, key: Key) {
-		const hash = await this.getHash(level + 1, key)
-		const node: Node = { level: level + 1, key, hash }
-		await this.setNode(node)
-		if (await this.isBoundary(node)) {
-			await this.createParents(level + 1, key)
-		}
+		const limit = this.LIMIT_KEY
+		await this.client.query(`CALL createparents($1, cast($2 as bytea), $3);`, [level, key, limit])
 	}
 
 	private async getFirstSibling(node: Node): Promise<Node> {
