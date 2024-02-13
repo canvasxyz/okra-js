@@ -29,6 +29,14 @@ test("compare pg to sqlite(1000)", async (t) => {
 		const value = blake3(key, { dkLen: 4 })
 		await tree.set(key, value)
 		await sqliteTree.set(key, value)
+
+		if (i > 50 && i % 2 === 0) {
+			view.setUint32(0, i - 50)
+			const key = new Uint8Array(buffer, 0, 4)
+
+			await tree.delete(key)
+			await sqliteTree.delete(key)
+		}
 	}
 
 	console.log("pg:\n")

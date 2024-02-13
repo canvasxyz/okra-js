@@ -119,7 +119,6 @@ DROP PROCEDURE IF EXISTS _okra_delete(BYTEA);
 
 CREATE OR REPLACE PROCEDURE _okra_delete(node_key BYTEA) AS $$
 DECLARE
-  node_level integer;
   node_hash bytea;
   node_value bytea;
   firstSiblingKey bytea;
@@ -129,7 +128,7 @@ DECLARE
   parent_new_hash bytea;
 BEGIN
 
-  SELECT level, hash, value INTO node_level, node_hash, node_value FROM _okra_getnode(0, node_key);
+  SELECT hash, value INTO node_hash, node_value FROM _okra_getnode(0, node_key);
 
   IF node_hash IS NULL THEN
     RETURN;
@@ -140,7 +139,7 @@ BEGIN
   END IF;
   CALL _okra_deletenode(0, node_key);
 
-  firstSiblingKey := (SELECT key FROM _okra_getfirstsibling(node_level, node_key));
+  firstSiblingKey := (SELECT key FROM _okra_getfirstsibling(0, node_key));
   IF firstSiblingKey IS NULL THEN
     CALL _okra_updateanchor(1);
   ELSE
