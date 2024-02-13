@@ -92,26 +92,22 @@ export class Tree {
 
 		await tree.client.connect()
 
-		await tree.client.query(`
+		await tree.client.query(
+			`--sql
 CREATE TABLE IF NOT EXISTS nodes (level INTEGER NOT NULL, key BYTEA, hash BYTEA NOT NULL, value BYTEA);
-CREATE TABLE IF NOT EXISTS oplist (operation INTEGER);
 CREATE UNIQUE INDEX IF NOT EXISTS node_index ON nodes(level, key);
 
 DROP FUNCTION IF EXISTS getnode(INTEGER, BYTEA);
 
-CREATE OR REPLACE FUNCTION getnode(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
-    SELECT
-        (CASE WHEN value IS NULL THEN
-            (CASE WHEN hash IS NULL THEN ''::bytea ELSE hash END)
-        ELSE (CASE WHEN hash IS NULL THEN ''::bytea ELSE hash END) || value END)
-    FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
+CREATE OR REPLACE FUNCTION getnode(level_ INTEGER, key_ BYTEA) RETURNS TABLE (value bytea, hash bytea, key bytea) AS $$
+SELECT value, hash, key FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_))
 $$ LANGUAGE SQL;
 
 DROP PROCEDURE IF EXISTS setnode(INTEGER, BYTEA, BYTEA, BYTEA);
 
-CREATE OR REPLACE PROCEDURE setnode(level_ INTEGER, key_ BYTEA, hash_ BYTEA, value_ BYTEA) AS $$
+CREATE OR REPLACE PROCEDURE setnode(level_ INTEGER, key_ BYTEA, hash_ BYTEA, value_ BYTEA DEFAULT NULL) AS $$
 BEGIN
-		IF getnode(level_, key_) IS NULL THEN
+		IF (select count(*) = 0 from getnode(level_, key_)) THEN
 			INSERT INTO nodes VALUES (level_, key_, hash_, value_);
 		ELSE
       UPDATE nodes SET hash = hash_, value = value_ WHERE level = level_ AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
@@ -129,7 +125,7 @@ DROP PROCEDURE IF EXISTS deleteparents(level_ INTEGER, key_ BYTEA);
 
 CREATE OR REPLACE PROCEDURE deleteparents(level_ INTEGER, key_ BYTEA) AS $$
 BEGIN
-		IF getnode(level_ + 1, key_) IS NULL THEN
+		IF (select count(*) = 0 from getnode(level_ + 1, key_)) THEN
       RETURN;
 		ELSE
       CALL deletenode(level_ + 1, key_);
@@ -138,15 +134,15 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-DROP PROCEDURE IF EXISTS createparents(INTEGER, BYTEA, BYTEA);
+DROP PROCEDURE IF EXISTS createparents(INTEGER, BYTEA);
 
-CREATE OR REPLACE PROCEDURE createparents(level_ INTEGER, key_ BYTEA, limit_key BYTEA) AS $$
+CREATE OR REPLACE PROCEDURE createparents(level_ INTEGER, key_ BYTEA) AS $$
 DECLARE
-    hash_ bytea := gethash(level_ + 1, key_, limit_key);
+    hash_ bytea := gethash(level_ + 1, key_);
 BEGIN
     CALL setnode(level_ + 1, key_, hash_, cast(null as bytea));
     IF isboundary(hash_) THEN
-      CALL createparents(level_ + 1, key_, limit_key);
+      CALL createparents(level_ + 1, key_);
     END IF;
 END
 $$ LANGUAGE plpgsql;
@@ -157,40 +153,119 @@ CREATE OR REPLACE FUNCTION isboundary(hash BYTEA) RETURNS boolean AS $$
 SELECT hash < decode('${hex(tree.LIMIT_KEY)}', 'hex');
 $$ LANGUAGE SQL;
 
-DROP FUNCTION IF EXISTS gethash(INTEGER, BYTEA, BYTEA);
+DROP FUNCTION IF EXISTS gethash(INTEGER, BYTEA);
 
-CREATE OR REPLACE FUNCTION gethash(level_ INTEGER, key_ BYTEA, limit_key BYTEA) RETURNS bytea AS $$
+CREATE OR REPLACE FUNCTION gethash(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
 SELECT sha256(string_agg(hash, '')) FROM (
-    SELECT hash FROM nodes WHERE level = $1 - 1 AND (cast($2 as bytea) ISNULL OR (key NOTNULL AND key >= $2)) AND (
+    SELECT hash FROM nodes WHERE level = level_ - 1 AND (cast(key_ as bytea) ISNULL OR (key NOTNULL AND key >= key_)) AND (
 				key ISNULL OR key < (
-            SELECT key FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3 ORDER BY key ASC NULLS FIRST LIMIT 1
-            ) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3)
+SELECT key FROM nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
+				tree.LIMIT_KEY,
+			)}', 'hex') ORDER BY key ASC NULLS FIRST LIMIT 1
+            ) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
+							tree.LIMIT_KEY,
+						)}', 'hex'))
     ) ORDER BY key ASC NULLS FIRST
 ) children
 $$ LANGUAGE SQL;
 
-DROP FUNCTION IF EXISTS getfirstsibling(INTEGER, BYTEA, BYTEA);
+DROP FUNCTION IF EXISTS getfirstsibling(INTEGER, BYTEA);
 
 -- TODO: return self if getfirstsibling is called on an anchor node
-CREATE OR REPLACE FUNCTION getfirstsibling(level_ INTEGER, key_ BYTEA, limit_key BYTEA) RETURNS TABLE(level INTEGER, key BYTEA, hash BYTEA) AS $$
-    SELECT level, key, hash FROM nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < limit_key)) ORDER BY key DESC NULLS LAST LIMIT 1
+CREATE OR REPLACE FUNCTION getfirstsibling(level_ INTEGER, key_ BYTEA) RETURNS TABLE(level INTEGER, key BYTEA, hash BYTEA) AS $$
+    SELECT level, key, hash FROM nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < decode('${hex(
+			tree.LIMIT_KEY,
+		)}', 'hex'))) ORDER BY key DESC NULLS LAST LIMIT 1
 $$ LANGUAGE SQL;
 
-DROP PROCEDURE IF EXISTS updateanchor(INTEGER, BYTEA);
+DROP PROCEDURE IF EXISTS updateanchor(INTEGER);
 
-CREATE OR REPLACE PROCEDURE updateanchor(level_ INTEGER, limit_key BYTEA) AS $$
+CREATE OR REPLACE PROCEDURE updateanchor(level_ INTEGER) AS $$
 DECLARE
-    hash_ bytea := gethash(cast($1 as integer), cast(null as bytea), $2);
+hash_ bytea := gethash(level_, cast(null as bytea));
 BEGIN
-    CALL setnode(cast($1 as integer), cast(null as bytea), hash_, cast(null as bytea));
+    CALL setnode(level_, cast(null as bytea), hash_, cast(null as bytea));
     IF (SELECT COUNT(*) = 0 FROM (SELECT * FROM nodes WHERE level = level_ AND key NOTNULL ORDER BY key LIMIT 1) sq) THEN
         CALL deleteparents(level_, null);
     ELSE
-        CALL updateanchor(level_ + 1, limit_key);
+        CALL updateanchor(level_ + 1);
     END IF;
 END
 $$ LANGUAGE plpgsql;
-`)
+
+DROP PROCEDURE IF EXISTS replaceMerging(INTEGER, BYTEA, BYTEA, BYTEA);
+
+CREATE OR REPLACE PROCEDURE replaceMerging(level_ INTEGER, key_ BYTEA, hash_ BYTEA, value_ BYTEA) AS $$
+DECLARE
+  firstSiblingKey bytea;
+BEGIN
+END
+$$ LANGUAGE plpgsql;
+
+DROP PROCEDURE IF EXISTS update(INTEGER, BYTEA);
+
+CREATE OR REPLACE PROCEDURE update(level_ INTEGER, key_ BYTEA) AS $$
+DECLARE
+  level_updt integer;
+  key_updt bytea;
+  hash_updt bytea;
+  value_updt bytea;
+BEGIN
+    SELECT level, key, hash, value INTO level_updt, key_updt, hash_updt, value_updt FROM nodes WHERE (level = level_) AND ((key ISNULL AND key_ ISNULL) OR (key = key_));
+    CALL replace(level_updt, key_updt, hash_updt, value_updt,
+      level_,
+      key_,
+      gethash(level_, key_)
+    );
+END
+$$ LANGUAGE plpgsql;
+
+DROP PROCEDURE IF EXISTS replace(INTEGER, BYTEA, BYTEA, BYTEA, INTEGER, BYTEA, BYTEA, BYTEA);
+
+CREATE OR REPLACE PROCEDURE replace(
+  old_level INTEGER, old_key BYTEA, old_hash BYTEA, old_value BYTEA,
+  new_level INTEGER, new_key BYTEA, new_hash BYTEA, new_value BYTEA DEFAULT NULL
+) AS $$
+DECLARE
+  replaceKey bytea;
+  firstSiblingKey bytea;
+BEGIN
+IF old_hash IS NOT NULL AND isboundary(old_hash) THEN
+  IF isboundary(new_hash) THEN
+    -- old node is boundary, new node is boundary
+    CALL setnode(new_level, new_key, new_hash, new_value);
+    CALL update(new_level + 1, new_key);
+  ELSE
+    -- old node is boundary, new node isn't boundary (merge)
+    CALL setnode(new_level, new_key, new_hash, new_value);
+    CALL deleteparents(new_level, new_key);
+
+    firstSiblingKey := (SELECT key FROM getfirstsibling(new_level, new_key));
+    IF (firstSiblingKey IS NULL) THEN
+      CALL updateanchor(new_level + 1);
+    ELSE
+      CALL update(new_level + 1, firstSiblingKey);
+    END IF;
+  END IF;
+ELSE
+  firstSiblingKey := (SELECT key FROM getfirstsibling(new_level, new_key));
+  CALL setnode(new_level, new_key, new_hash, new_value);
+
+  IF isboundary(new_hash) THEN
+    -- old node isn't boundary, new node is boundary (split)
+    CALL createparents(new_level, new_key);
+  END IF;
+
+  IF firstSiblingKey ISNULL THEN
+    CALL updateanchor(new_level + 1);
+  ELSE
+    CALL update(new_level + 1, firstSiblingKey);
+  END IF;
+END IF;
+END
+$$ LANGUAGE plpgsql;
+`,
+		)
 
 		if (options.clear) {
 			await tree.client.query(`TRUNCATE nodes`)
@@ -267,7 +342,7 @@ $$ LANGUAGE plpgsql;
 
 		const firstSibling = await this.getFirstSibling(node)
 		if (firstSibling.key === null) {
-			await this.client.query(`CALL updateanchor($1, $2);`, [1, limit])
+			await this.client.query(`CALL updateanchor($1);`, [1])
 		} else {
 			const oldNode = await this.getNode(1, firstSibling.key)
 			const hash = await this.getHash(1, firstSibling.key)
@@ -276,56 +351,29 @@ $$ LANGUAGE plpgsql;
 	}
 
 	private async replace(oldNode: Node | null, newNode: Node) {
-		const limit = this.LIMIT_KEY
-
-		if (oldNode !== null && (await this.isBoundary(oldNode))) {
-			if (await this.isBoundary(newNode)) {
-				// old node is boundary, new node is boundary
-				await this.setNode(newNode)
-				const oldNode = await this.getNode(newNode.level + 1, newNode.key)
-				const hash = await this.getHash(newNode.level + 1, newNode.key)
-				await this.replace(oldNode, { level: newNode.level + 1, key: newNode.key, hash })
-			} else {
-				// old node is boundary, new node isn't boundary (merge)
-				await this.setNode(newNode)
-
-				await this.client.query(`CALL deleteparents($1, cast($2 as bytea));`, [newNode.level, newNode.key])
-
-				const firstSibling = await this.getFirstSibling(newNode)
-				if (firstSibling.key === null) {
-					await this.client.query(`CALL updateanchor($1, $2);`, [newNode.level + 1, limit])
-				} else {
-					const oldNode = await this.getNode(newNode.level + 1, firstSibling.key)
-					const hash = await this.getHash(newNode.level + 1, firstSibling.key)
-					await this.replace(oldNode, { level: newNode.level + 1, key: firstSibling.key, hash })
-				}
-			}
-		} else {
-			const firstSibling = await this.getFirstSibling(newNode)
-
-			await this.setNode(newNode)
-
-			// old node isn't boundary, new node is boundary (split)
-			if (await this.isBoundary(newNode)) {
-				await this.client.query(`CALL createparents($1, cast($2 as bytea), $3);`, [newNode.level, newNode.key, limit])
-			}
-
-			if (firstSibling.key == null) {
-				await this.client.query(`CALL updateanchor($1, $2);`, [newNode.level + 1, limit])
-			} else {
-				const oldNode = await this.getNode(newNode.level + 1, firstSibling.key)
-				const hash = await this.getHash(newNode.level + 1, firstSibling.key)
-				await this.replace(oldNode, { level: newNode.level + 1, key: firstSibling.key, hash })
-			}
-		}
+		await this.client.query(
+			`CALL replace(
+  $1, cast($2 AS BYTEA), cast($3 AS BYTEA), cast($4 AS BYTEA),
+  $5, cast($6 AS BYTEA), cast($7 AS BYTEA), cast($8 AS BYTEA))`,
+			[
+				oldNode?.level ?? null,
+				oldNode?.key ?? null,
+				oldNode?.hash ?? null,
+				oldNode?.value ?? null,
+				newNode.level,
+				newNode.key,
+				newNode.hash,
+				newNode.value,
+			],
+		)
 	}
 
 	private async getFirstSibling(node: Node): Promise<Node> {
 		const limit = this.LIMIT_KEY
-		const { rows } = await this.client.query(
-			`SELECT level, key, hash FROM getfirstsibling($1::integer, $2::bytea, $3::bytea)`,
-			[node.level, node.key, limit],
-		)
+		const { rows } = await this.client.query(`SELECT level, key, hash FROM getfirstsibling($1::integer, $2::bytea)`, [
+			node.level,
+			node.key,
+		])
 		const firstSibling = rows[0] as NodeRecord | undefined
 
 		assert(firstSibling !== undefined, "expected firstSibling !== undefined")
@@ -342,11 +390,12 @@ $$ LANGUAGE plpgsql;
 
 	private async getNode(level: number, key: Key): Promise<Node | null> {
 		const { rows } = await this.client.query(`SELECT getnode($1::integer, $2::bytea)`, [level, key])
-		const row = rows[0]
 
-		if (row.getnode === null) {
+		if (rows[0] === undefined || rows[0].getnode === null) {
 			return null
 		}
+
+		const row = rows[0]
 
 		const hash = row.getnode.subarray(0, H)
 		const value = row.getnode.subarray(H)

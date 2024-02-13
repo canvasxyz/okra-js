@@ -34,8 +34,8 @@ test("compare pg to sqlite(1000)", async (t) => {
 	console.log("pg:\n")
 	console.log(await text(tree.print()))
 
-	// console.log("sqlite:\n")
-	// console.log(await text(sqliteTree.print()))
+	console.log("sqlite:\n")
+	console.log(await text(sqliteTree.print()))
 
 	t.deepEqual(await tree.getRoot(), sqliteTree.getRoot())
 
