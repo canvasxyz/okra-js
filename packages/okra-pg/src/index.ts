@@ -192,11 +192,10 @@ CREATE OR REPLACE FUNCTION _okra_isboundary(hash BYTEA) RETURNS boolean AS $$
 SELECT hash < decode('${hex(tree.LIMIT_KEY)}', 'hex');
 $$ LANGUAGE SQL;
 
-DROP FUNCTION IF EXISTS _okra_gethash(INTEGER, BYTEA);
+DROP FUNCTION IF EXISTS _okra_getchildren(INTEGER, BYTEA);
 
-CREATE OR REPLACE FUNCTION _okra_gethash(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
-SELECT sha256(string_agg(hash, '')) FROM (
-    SELECT hash FROM _okra_nodes WHERE level = level_ - 1 AND (cast(key_ as bytea) ISNULL OR (key NOTNULL AND key >= key_)) AND (
+CREATE OR REPLACE FUNCTION _okra_getchildren(level_ INTEGER, key_ BYTEA) RETURNS TABLE (level integer, key bytea, hash bytea, value bytea) AS $$
+    SELECT level, key, hash, value FROM _okra_nodes WHERE level = level_ - 1 AND (cast(key_ as bytea) ISNULL OR (key NOTNULL AND key >= key_)) AND (
 				key ISNULL OR key < (
 SELECT key FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
 				tree.LIMIT_KEY,
@@ -205,7 +204,12 @@ SELECT key FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(k
 							tree.LIMIT_KEY,
 						)}', 'hex'))
     ) ORDER BY key ASC NULLS FIRST
-) children
+$$ LANGUAGE SQL;
+
+DROP FUNCTION IF EXISTS _okra_gethash(INTEGER, BYTEA);
+
+CREATE OR REPLACE FUNCTION _okra_gethash(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
+SELECT sha256(string_agg(hash, '')) FROM (SELECT hash FROM _okra_getchildren(level_, key_)) children;
 $$ LANGUAGE SQL;
 
 DROP FUNCTION IF EXISTS _okra_getfirstsibling(INTEGER, BYTEA);
@@ -350,15 +354,7 @@ $$ LANGUAGE plpgsql;
 			throw new RangeError("Cannot get children of a leaf node")
 		}
 
-		const limit = this.LIMIT_KEY
-		const { rows } = await this.client.query(
-			`SELECT * FROM _okra_nodes WHERE level = $1 - 1 AND (cast($2 as bytea) ISNULL OR (key NOTNULL AND key >= $2)) AND (
-					key ISNULL OR key < (
-	SELECT key FROM _okra_nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3 ORDER BY key ASC NULLS FIRST LIMIT 1
-	) OR NOT EXISTS (SELECT 1 FROM _okra_nodes WHERE level = $1 - 1 AND key NOTNULL AND (cast($2 as bytea) ISNULL OR key > $2) AND hash < $3)
-				) ORDER BY key ASC NULLS FIRST`,
-			[level, key, limit],
-		)
+		const { rows } = await this.client.query(`SELECT * FROM _okra_getchildren($1, $2);`, [level, key])
 
 		return rows.map(({ level, key, hash, value }) => {
 			if (value === null || value.length === 0) {
