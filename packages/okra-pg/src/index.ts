@@ -115,6 +115,45 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
+DROP PROCEDURE IF EXISTS _okra_delete(BYTEA);
+
+CREATE OR REPLACE PROCEDURE _okra_delete(node_key BYTEA) AS $$
+DECLARE
+  node_level integer;
+  node_hash bytea;
+  node_value bytea;
+  firstSiblingKey bytea;
+  parent_old_key bytea;
+  parent_old_hash bytea;
+  parent_old_value bytea;
+  parent_new_hash bytea;
+BEGIN
+
+  SELECT level, hash, value INTO node_level, node_hash, node_value FROM _okra_getnode(0, node_key);
+
+  IF node_hash IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF node_key IS NOT NULL AND _okra_isboundary(node_hash) THEN
+    CALL _okra_deleteparents(0, node_key);
+  END IF;
+  CALL _okra_deletenode(0, node_key);
+
+  firstSiblingKey := (SELECT key FROM _okra_getfirstsibling(node_level, node_key));
+  IF firstSiblingKey IS NULL THEN
+    CALL _okra_updateanchor(1);
+  ELSE
+    SELECT key, hash, value INTO parent_old_key, parent_old_hash, parent_old_value FROM _okra_getnode(1, firstSiblingKey);
+    parent_new_hash := _okra_gethash(1, firstSiblingKey);
+    CALL _okra_replace(
+      1, parent_old_key, parent_old_hash, parent_old_value,
+      1, firstSiblingKey, parent_new_hash
+    );
+  END IF;
+END
+$$ LANGUAGE plpgsql;
+
 DROP PROCEDURE IF EXISTS _okra_deletenode(INTEGER, BYTEA);
 
 CREATE OR REPLACE PROCEDURE _okra_deletenode(level_ INTEGER, key_ BYTEA) AS $$
@@ -255,6 +294,22 @@ ELSE
 END IF;
 END
 $$ LANGUAGE plpgsql;
+
+DROP PROCEDURE IF EXISTS _okra_set(BYTEA, BYTEA, BYTEA);
+
+CREATE OR REPLACE PROCEDURE _okra_set(key_ bytea, value_ bytea, new_hash bytea) AS $$
+DECLARE
+  old_key bytea;
+  old_hash bytea;
+  old_value bytea;
+BEGIN
+  SELECT key, hash, value INTO old_key, old_hash, old_value FROM _okra_getnode(0, key_);
+  CALL _okra_replace(
+    0, old_key, old_hash, old_value,
+    0, key_, new_hash, value_
+  );
+END
+$$ LANGUAGE plpgsql;
 `,
 		)
 
@@ -262,7 +317,12 @@ $$ LANGUAGE plpgsql;
 			await tree.client.query(`TRUNCATE _okra_nodes`)
 		}
 
-		await tree.setNode({ level: 0, key: null, hash: tree.LEAF_ANCHOR_HASH })
+		await tree.client.query(`CALL _okra_setnode($1, cast($2 as bytea), $3, $4);`, [
+			0,
+			null,
+			tree.LEAF_ANCHOR_HASH,
+			null,
+		])
 
 		return tree
 	}
@@ -310,105 +370,12 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array) {
-		const oldLeaf = await this.getNode(0, key)
 		const hash = this.hashEntry(key, value)
-		const newLeaf: Node = { level: 0, key, hash, value }
-
-		await this.replace(oldLeaf, newLeaf)
+		await this.client.query(`CALL _okra_set($1, $2, $3)`, [key, value, hash])
 	}
 
 	public async delete(key: Uint8Array) {
-		const limit = this.LIMIT_KEY
-
-		const node = await this.getNode(0, key)
-		if (node === null) {
-			return
-		}
-
-		if (node.key !== null && (await this.isBoundary(node))) {
-			await this.client.query(`CALL _okra_deleteparents($1, cast($2 as bytea));`, [0, key])
-		}
-
-		await this.client.query(`CALL _okra_deletenode($1, cast($2 as bytea));`, [0, key])
-
-		const firstSibling = await this.getFirstSibling(node)
-		if (firstSibling.key === null) {
-			await this.client.query(`CALL _okra_updateanchor($1);`, [1])
-		} else {
-			const oldNode = await this.getNode(1, firstSibling.key)
-			const hash = await this.getHash(1, firstSibling.key)
-			await this.replace(oldNode, { level: 1, key: firstSibling.key, hash })
-		}
-	}
-
-	private async replace(oldNode: Node | null, newNode: Node) {
-		await this.client.query(
-			`CALL _okra_replace(
-  $1, cast($2 AS BYTEA), cast($3 AS BYTEA), cast($4 AS BYTEA),
-  $5, cast($6 AS BYTEA), cast($7 AS BYTEA), cast($8 AS BYTEA))`,
-			[
-				oldNode?.level ?? null,
-				oldNode?.key ?? null,
-				oldNode?.hash ?? null,
-				oldNode?.value ?? null,
-				newNode.level,
-				newNode.key,
-				newNode.hash,
-				newNode.value,
-			],
-		)
-	}
-
-	private async getFirstSibling(node: Node): Promise<Node> {
-		const limit = this.LIMIT_KEY
-		const { rows } = await this.client.query(
-			`SELECT level, key, hash FROM _okra_getfirstsibling($1::integer, $2::bytea)`,
-			[node.level, node.key],
-		)
-		const firstSibling = rows[0] as NodeRecord | undefined
-
-		assert(firstSibling !== undefined, "expected firstSibling !== undefined")
-		const { level, key, hash } = firstSibling
-		return { level, key, hash }
-	}
-
-	private async getHash(level: number, key: Key): Promise<Uint8Array> {
-		const limit = this.LIMIT_KEY
-		const { rows } = await this.client.query(`SELECT _okra_gethash($1::integer, $2::bytea, $3::bytea)`, [
-			level,
-			key,
-			limit,
-		])
-		const row = rows[0]
-		return row.gethash
-	}
-
-	private async getNode(level: number, key: Key): Promise<Node | null> {
-		const { rows } = await this.client.query(`SELECT _okra_getnode($1::integer, $2::bytea)`, [level, key])
-
-		if (rows[0] === undefined || rows[0].getnode === null) {
-			return null
-		}
-
-		const row = rows[0]
-
-		const hash = row.getnode.subarray(0, H)
-		const value = row.getnode.subarray(H)
-		if (value.length === 0) {
-			return { level, key, hash }
-		} else {
-			return { level, key, hash, value }
-		}
-	}
-
-	private async setNode({ level, key, hash, value }: Node) {
-		await this.client.query(`CALL _okra_setnode($1, cast($2 as bytea), $3, $4);`, [level, key, hash, value])
-	}
-
-	private async isBoundary({ hash }: Node) {
-		const { rows } = await this.client.query(`SELECT _okra_isboundary(cast ($1 as bytea));`, [hash])
-		const row = rows[0]
-		return row.isboundary
+		await this.client.query(`CALL _okra_delete($1)`, [key])
 	}
 
 	private static size = new ArrayBuffer(4)
