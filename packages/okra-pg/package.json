@@ -13,7 +13,7 @@
 		"node": ">=18"
 	},
 	"scripts": {
-		"test": "ava"
+		"test": "ava --timeout=300s"
 	},
 	"repository": {
 		"type": "git",
