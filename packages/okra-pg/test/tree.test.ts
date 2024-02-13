@@ -12,7 +12,7 @@ import {
 	Tree as SqliteTree,
 } from "@canvas-js/okra-sqlite"
 
-test("compare pg to sqlite(1000)", async (t) => {
+test("compare pg to sqlite(1000) with interleaved deletes", async (t) => {
 	const path = "postgresql://localhost:5432/test" // TODO
 	const client = new pg.Client(path)
 
