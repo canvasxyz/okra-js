@@ -364,6 +364,11 @@ $$ LANGUAGE plpgsql;
 		})
 	}
 
+	public async getValue(key: Uint8Array): Promise<Uint8Array | null> {
+		const { rows } = await this.client.query(`SELECT * FROM _okra_nodes WHERE level = 0 AND key = $1`, [key])
+		return rows[0] ? rows[0].value : null
+	}
+
 	public async set(key: Uint8Array, value: Uint8Array) {
 		const hash = this.hashEntry(key, value)
 		await this.client.query(`CALL _okra_set($1, $2, $3)`, [key, value, hash])
