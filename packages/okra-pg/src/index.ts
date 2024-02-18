@@ -1,9 +1,10 @@
 import pg from "pg"
+import Cursor from "pg-cursor"
 
 import { sha256 } from "@noble/hashes/sha256"
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
-import { Key, Node, assert } from "@canvas-js/okra"
+import { Key, Node, Bound } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
@@ -330,6 +331,10 @@ $$ LANGUAGE plpgsql;
 		return tree
 	}
 
+	public async close() {
+		await this.client.end()
+	}
+
 	constructor(client: pg.Client, options: { K?: number; Q?: number; hasher?: Hasher } = {}) {
 		this.client = client
 		this.K = options.K ?? 16 // key size
@@ -367,6 +372,28 @@ $$ LANGUAGE plpgsql;
 	public async getValue(key: Uint8Array): Promise<Uint8Array | null> {
 		const { rows } = await this.client.query(`SELECT * FROM _okra_nodes WHERE level = 0 AND key = $1`, [key])
 		return rows[0] ? rows[0].value : null
+	}
+
+	public async *entries(
+		lowerBound: Bound<Uint8Array> | null,
+		upperBound: Bound<Uint8Array> | null,
+		options: { reverse?: boolean } = {},
+	): AsyncIterableIterator<NodeRecord> {
+		const query =
+			`SELECT * FROM _okra_nodes WHERE level = 0 ` +
+			(!lowerBound ? "AND $1::bytea IS NULL " : lowerBound.inclusive ? `AND key >= $1 ` : `AND key > $1 `) +
+			(!upperBound ? "AND $2::bytea IS NULL " : upperBound.inclusive ? `AND key <= $2 ` : `AND key < $2 `) +
+			`AND key IS NOT NULL ORDER BY key ${options.reverse ? "DESC" : "ASC"}`
+
+		const cursor = await this.client.query(new Cursor(query, [lowerBound?.key, upperBound?.key]))
+
+		while (true) {
+			const nodes = (await cursor.read(10)) as NodeRecord[]
+			if (nodes.length === 0) return
+			for (let i = 0; i < nodes.length; i++) {
+				yield nodes[i]
+			}
+		}
 	}
 
 	public async set(key: Uint8Array, value: Uint8Array) {

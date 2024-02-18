@@ -27,9 +27,11 @@
 		"@types/better-sqlite3": "^7.6.8",
 		"better-sqlite3": "^9.3.0",
 		"pg": "^8.11.3",
+		"pg-cursor": "^2.10.3",
 		"uint8arrays": "^5.0.1"
 	},
 	"devDependencies": {
-		"@types/pg": "^8.11.0"
+		"@types/pg": "^8.11.0",
+		"@types/pg-cursor": "^2.7.2"
 	}
 }
