@@ -8,78 +8,12 @@ import { Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
-abstract class Hasher {
-	protected readonly size: ArrayBuffer
-	protected readonly K: number
-	protected readonly view: DataView
-
-	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
-		this.size = size
-		this.K = K
-		this.view = new DataView(size)
-	}
-
-	abstract hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array
-	abstract hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array
-}
-
-export class Blake3Hasher extends Hasher {
-	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
-		super({ size, K })
-	}
-
-	hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		const hash = blake3.create({ dkLen: this.K })
-		this.view.setUint32(0, key.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(key)
-		this.view.setUint32(0, value.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(value)
-		return hash.digest()
-	}
-
-	hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array {
-		const hash = blake3.create({ dkLen: this.K })
-		for (const child of children) {
-			hash.update(child.hash)
-		}
-		return hash.digest()
-	}
-}
-
-export class Sha256Hasher extends Hasher {
-	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
-		super({ size, K })
-	}
-
-	hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		const hash = sha256.create()
-		this.view.setUint32(0, key.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(key)
-		this.view.setUint32(0, value.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(value)
-		return hash.digest()
-	}
-
-	hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array {
-		const hash = sha256.create()
-		for (const child of children) {
-			hash.update(child.hash)
-		}
-		return hash.digest()
-	}
-}
-
 export class Tree {
 	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
 	private readonly LIMIT_KEY: Uint8Array
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
-	private readonly hasher?: Hasher
 
 	private readonly db: sqlite.Database
 	private readonly statements: {
@@ -93,15 +27,13 @@ export class Tree {
 		selectAnchorSibling: sqlite.Statement<{ level: number }>
 	}
 
-	constructor(path: string | null = null, options: { K?: number; Q?: number; hasher?: Hasher } = {}) {
+	constructor(path: string | null = null, options: { K?: number; Q?: number } = {}) {
 		this.K = options.K ?? 16
 		this.Q = options.Q ?? 32
-		if (options.hasher) this.hasher = options.hasher
-		if (!this.hasher) throw new Error("hasher expected!")
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
-		this.LEAF_ANCHOR_HASH = this.hasher.hashChildren([])
+		this.LEAF_ANCHOR_HASH = sha256.create().digest()
 
 		this.db = new Database(path ?? ":memory:")
 
@@ -280,10 +212,11 @@ export class Tree {
 	private getHash(level: number, key: Key): Uint8Array {
 		const children = this.statements.selectChildren.all({ level, key, limit: this.LIMIT_KEY }) as { hash: Uint8Array }[]
 
-		if (!this.hasher) {
-			throw new Error("hasher expected!")
+		const hash = sha256.create()
+		for (const child of children) {
+			hash.update(child.hash)
 		}
-		return this.hasher.hashChildren(children)
+		return hash.digest()
 	}
 
 	private getNode(level: number, key: Key): Node | null {
@@ -321,10 +254,14 @@ export class Tree {
 	private static view = new DataView(Tree.size)
 
 	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		if (this.hasher) {
-			return this.hasher.hashEntry(key, value)
-		}
-		throw new Error("hasher expected!")
+		const hash = sha256.create()
+		Tree.view.setUint32(0, key.length)
+		hash.update(new Uint8Array(Tree.size))
+		hash.update(key)
+		Tree.view.setUint32(0, value.length)
+		hash.update(new Uint8Array(Tree.size))
+		hash.update(value)
+		return hash.digest()
 	}
 
 	/**

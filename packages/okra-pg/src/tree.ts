@@ -2,7 +2,6 @@ import pg from "pg"
 import Cursor from "pg-cursor"
 
 import { sha256 } from "@noble/hashes/sha256"
-import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 import { Tree, Key, Node, Bound } from "@canvas-js/okra"
 
@@ -10,85 +9,19 @@ type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; val
 
 const H = 16
 
-abstract class Hasher {
-	protected readonly size: ArrayBuffer
-	protected readonly K: number
-	protected readonly view: DataView
-
-	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
-		this.size = size
-		this.K = K
-		this.view = new DataView(size)
-	}
-
-	abstract hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array
-	abstract hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array
-}
-
-export class Blake3Hasher extends Hasher {
-	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
-		super({ size, K })
-	}
-
-	hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		const hash = blake3.create({ dkLen: this.K })
-		this.view.setUint32(0, key.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(key)
-		this.view.setUint32(0, value.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(value)
-		return hash.digest()
-	}
-
-	hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array {
-		const hash = blake3.create({ dkLen: this.K })
-		for (const child of children) {
-			hash.update(child.hash)
-		}
-		return hash.digest()
-	}
-}
-
-export class Sha256Hasher extends Hasher {
-	constructor({ size, K }: { size: ArrayBuffer; K: number }) {
-		super({ size, K })
-	}
-
-	hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		const hash = sha256.create()
-		this.view.setUint32(0, key.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(key)
-		this.view.setUint32(0, value.length)
-		hash.update(new Uint8Array(this.size))
-		hash.update(value)
-		return hash.digest()
-	}
-
-	hashChildren(children: Array<{ hash: Uint8Array }>): Uint8Array {
-		const hash = sha256.create()
-		for (const child of children) {
-			hash.update(child.hash)
-		}
-		return hash.digest()
-	}
-}
-
 export class PostgresTree {
 	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
 	private readonly LIMIT_KEY: Uint8Array
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
-	private readonly hasher?: Hasher
 	private readonly prefix: string
 
 	private readonly client: pg.Client
 
 	public static async initialize(
 		client: pg.Client,
-		options: { K?: number; Q?: number; clear?: boolean; hasher?: Hasher; prefix?: string } = {},
+		options: { K?: number; Q?: number; clear?: boolean; prefix?: string } = {},
 	) {
 		if (options.prefix !== undefined && options.prefix.match(/^[A-Za-z]+$/) === null) {
 			throw new Error("prefix must be alphabetical")
@@ -341,17 +274,15 @@ $$ LANGUAGE plpgsql;
 		await this.client.end()
 	}
 
-	constructor(client: pg.Client, options: { K?: number; Q?: number; hasher?: Hasher; prefix?: string } = {}) {
+	constructor(client: pg.Client, options: { K?: number; Q?: number; prefix?: string } = {}) {
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
 		this.prefix = options.prefix ?? ""
-		if (options.hasher) this.hasher = options.hasher
-		if (!this.hasher) throw new Error("hasher expected!")
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
-		this.LEAF_ANCHOR_HASH = this.hasher.hashChildren([])
+		this.LEAF_ANCHOR_HASH = sha256.create().digest()
 	}
 
 	public async getRoot(): Promise<Node> {
@@ -418,10 +349,14 @@ $$ LANGUAGE plpgsql;
 	private static view = new DataView(PostgresTree.size)
 
 	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		if (this.hasher) {
-			return this.hasher.hashEntry(key, value)
-		}
-		throw new Error("hasher expected!")
+		const hash = sha256.create()
+		PostgresTree.view.setUint32(0, key.length)
+		hash.update(new Uint8Array(PostgresTree.size))
+		hash.update(key)
+		PostgresTree.view.setUint32(0, value.length)
+		hash.update(new Uint8Array(PostgresTree.size))
+		hash.update(value)
+		return hash.digest()
 	}
 
 	public async *print(options: { hashSize?: number } = {}): AsyncIterableIterator<Uint8Array> {

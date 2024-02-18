@@ -3,15 +3,10 @@ import { text } from "node:stream/consumers"
 
 import pg from "pg"
 
-import { Sha256Hasher, Blake3Hasher, PostgresTree } from "@canvas-js/okra-pg"
+import { PostgresTree } from "@canvas-js/okra-pg"
+import { Tree as SqliteTree } from "@canvas-js/okra-sqlite"
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
-
-import {
-	Sha256Hasher as SqliteSha256Hasher,
-	Blake3Hasher as SqliteBlake3Hasher,
-	Tree as SqliteTree,
-} from "@canvas-js/okra-sqlite"
 
 const getVal = (index: number) => {
 	const buffer = new ArrayBuffer(4)
@@ -26,8 +21,7 @@ const getTree = async ({ prefix, items }: { prefix?: string; items?: number } = 
 	const path = "postgresql://localhost:5432/test" // TODO
 	const client = new pg.Client(path)
 
-	const hasher = new Sha256Hasher({ size: new ArrayBuffer(4), K: 16 })
-	const tree = await PostgresTree.initialize(client, { K: 16, Q: 4, clear: true, hasher, prefix })
+	const tree = await PostgresTree.initialize(client, { K: 16, Q: 4, clear: true, prefix })
 
 	if (items !== undefined) {
 		for (let i = 0; i < items; i++) {
@@ -40,8 +34,7 @@ const getTree = async ({ prefix, items }: { prefix?: string; items?: number } = 
 }
 
 const getSqliteTree = () => {
-	const sqliteHasher = new SqliteSha256Hasher({ size: new ArrayBuffer(4), K: 16 })
-	const sqliteTree = new SqliteTree(null, { K: 16, Q: 4, hasher: sqliteHasher })
+	const sqliteTree = new SqliteTree(null, { K: 16, Q: 4 })
 	return sqliteTree
 }
 
