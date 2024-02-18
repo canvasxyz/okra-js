@@ -3,7 +3,7 @@ import { text } from "node:stream/consumers"
 
 import pg from "pg"
 
-import { Sha256Hasher, Blake3Hasher, Tree } from "@canvas-js/okra-pg"
+import { Sha256Hasher, Blake3Hasher, PostgresTree } from "@canvas-js/okra-pg"
 import { blake3 } from "@noble/hashes/blake3"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
@@ -27,7 +27,7 @@ const getTree = async ({ prefix, items }: { prefix?: string; items?: number } = 
 	const client = new pg.Client(path)
 
 	const hasher = new Sha256Hasher({ size: new ArrayBuffer(4), K: 16 })
-	const tree = await Tree.initialize(client, { K: 16, Q: 4, clear: true, hasher, prefix })
+	const tree = await PostgresTree.initialize(client, { K: 16, Q: 4, clear: true, hasher, prefix })
 
 	if (items !== undefined) {
 		for (let i = 0; i < items; i++) {
