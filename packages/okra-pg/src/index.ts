@@ -82,13 +82,19 @@ export class Tree {
 	private readonly LIMIT_KEY: Uint8Array
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
 	private readonly hasher?: Hasher
+	private readonly prefix: string
 
 	private readonly client: pg.Client
 
 	public static async initialize(
 		client: pg.Client,
-		options: { K?: number; Q?: number; clear?: boolean; hasher?: Hasher } = {},
+		options: { K?: number; Q?: number; clear?: boolean; hasher?: Hasher; prefix?: string } = {},
 	) {
+		if (options.prefix !== undefined && options.prefix.match(/^[A-Za-z]+$/) === null) {
+			throw new Error("prefix must be alphabetical")
+		}
+
+		const prefix = options.prefix ?? ""
 		const tree = new Tree(client, options)
 
 		await tree.client.connect()
@@ -314,14 +320,14 @@ BEGIN
   );
 END
 $$ LANGUAGE plpgsql;
-`,
+`.replace(/_okra_/g, `${prefix}_okra_`),
 		)
 
 		if (options.clear) {
-			await tree.client.query(`TRUNCATE _okra_nodes`)
+			await tree.client.query(`TRUNCATE ${prefix}_okra_nodes`)
 		}
 
-		await tree.client.query(`CALL _okra_setnode($1, cast($2 as bytea), $3, $4);`, [
+		await tree.client.query(`CALL ${prefix}_okra_setnode($1, cast($2 as bytea), $3, $4);`, [
 			0,
 			null,
 			tree.LEAF_ANCHOR_HASH,
@@ -335,10 +341,11 @@ $$ LANGUAGE plpgsql;
 		await this.client.end()
 	}
 
-	constructor(client: pg.Client, options: { K?: number; Q?: number; hasher?: Hasher } = {}) {
+	constructor(client: pg.Client, options: { K?: number; Q?: number; hasher?: Hasher; prefix?: string } = {}) {
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
+		this.prefix = options.prefix ?? ""
 		if (options.hasher) this.hasher = options.hasher
 		if (!this.hasher) throw new Error("hasher expected!")
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
@@ -348,7 +355,7 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async getRoot(): Promise<Node> {
-		const { rows } = await this.client.query(`SELECT * FROM _okra_nodes ORDER BY level DESC LIMIT 1`)
+		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_nodes ORDER BY level DESC LIMIT 1`)
 		const { level, key, hash } = rows[0] as NodeRecord
 		return { level, key, hash }
 	}
@@ -358,7 +365,7 @@ $$ LANGUAGE plpgsql;
 			throw new RangeError("Cannot get children of a leaf node")
 		}
 
-		const { rows } = await this.client.query(`SELECT * FROM _okra_getchildren($1, $2);`, [level, key])
+		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_getchildren($1, $2);`, [level, key])
 
 		return rows.map(({ level, key, hash, value }) => {
 			if (value === null || value.length === 0) {
@@ -370,7 +377,9 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async getValue(key: Uint8Array): Promise<Uint8Array | null> {
-		const { rows } = await this.client.query(`SELECT * FROM _okra_nodes WHERE level = 0 AND key = $1`, [key])
+		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 AND key = $1`, [
+			key,
+		])
 		return rows[0] ? rows[0].value : null
 	}
 
@@ -380,7 +389,7 @@ $$ LANGUAGE plpgsql;
 		options: { reverse?: boolean } = {},
 	): AsyncIterableIterator<NodeRecord> {
 		const query =
-			`SELECT * FROM _okra_nodes WHERE level = 0 ` +
+			`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 ` +
 			(!lowerBound ? "AND $1::bytea IS NULL " : lowerBound.inclusive ? `AND key >= $1 ` : `AND key > $1 `) +
 			(!upperBound ? "AND $2::bytea IS NULL " : upperBound.inclusive ? `AND key <= $2 ` : `AND key < $2 `) +
 			`AND key IS NOT NULL ORDER BY key ${options.reverse ? "DESC" : "ASC"}`
@@ -398,11 +407,11 @@ $$ LANGUAGE plpgsql;
 
 	public async set(key: Uint8Array, value: Uint8Array) {
 		const hash = this.hashEntry(key, value)
-		await this.client.query(`CALL _okra_set($1, $2, $3)`, [key, value, hash])
+		await this.client.query(`CALL ${this.prefix}_okra_set($1, $2, $3)`, [key, value, hash])
 	}
 
 	public async delete(key: Uint8Array) {
-		await this.client.query(`CALL _okra_delete($1)`, [key])
+		await this.client.query(`CALL ${this.prefix}_okra_delete($1)`, [key])
 	}
 
 	private static size = new ArrayBuffer(4)
