@@ -3,13 +3,13 @@ import Cursor from "pg-cursor"
 
 import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
-import { Tree, Key, Node, Bound } from "@canvas-js/okra"
+import { Tree, Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
 const H = 16
 
-export class PostgresTree {
+export class PostgresTree implements KeyValueStore, Source, Target {
 	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
@@ -275,6 +275,8 @@ $$ LANGUAGE plpgsql;
 	}
 
 	constructor(client: pg.Client, options: { K?: number; Q?: number; prefix?: string } = {}) {
+		// super(store, { K: options.K, Q: options.Q })
+
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
@@ -307,18 +309,42 @@ $$ LANGUAGE plpgsql;
 		})
 	}
 
-	public async getValue(key: Uint8Array): Promise<Uint8Array | null> {
+	public async getNode(level: number, key: Key): Promise<Node | null> {
+		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_getnode($1, $2);`, [level, key])
+		if (rows[0] === undefined) {
+			return null
+		}
+
+		const { hash, value } = rows[0] as NodeRecord
+		if (value === null) {
+			return { level, key, hash }
+		} else {
+			return { level, key, hash, value }
+		}
+	}
+
+	public async get(key: Uint8Array): Promise<Uint8Array | null> {
 		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 AND key = $1`, [
 			key,
 		])
 		return rows[0] ? rows[0].value : null
 	}
 
+	public async *nodes(
+		level: number,
+		lowerBound: Bound<Key> | null = null,
+		upperBound: Bound<Key> | null = null,
+		{ reverse = false }: { reverse?: boolean | undefined } = {},
+	): AsyncGenerator<Node, void, undefined> {
+		throw new Error("unimplemented") // TODO
+		// yield* super.nodes(level, lowerBound, upperBound, { reverse })
+	}
+
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null,
 		upperBound: Bound<Uint8Array> | null,
-		options: { reverse?: boolean } = {},
-	): AsyncIterableIterator<NodeRecord> {
+		options: { reverse?: boolean | undefined } = {},
+	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		const query =
 			`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 ` +
 			(!lowerBound ? "AND $1::bytea IS NULL " : lowerBound.inclusive ? `AND key >= $1 ` : `AND key > $1 `) +
@@ -330,8 +356,9 @@ $$ LANGUAGE plpgsql;
 		while (true) {
 			const nodes = (await cursor.read(10)) as NodeRecord[]
 			if (nodes.length === 0) return
-			for (let i = 0; i < nodes.length; i++) {
-				yield nodes[i]
+			for (const leaf of nodes) {
+				assert(leaf.key !== null && leaf.value !== null, "invalid leaf entry")
+				yield [leaf.key, leaf.value]
 			}
 		}
 	}

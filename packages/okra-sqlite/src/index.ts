@@ -80,7 +80,7 @@ export class Tree {
 		return { level, key, hash }
 	}
 
-	public getValue(key: Uint8Array): Uint8Array | null {
+	public get(key: Uint8Array): Uint8Array | null {
 		const row = this.statements.select.get({ level: 0, key }) as NodeRecord
 		return row ? row.value : null
 	}

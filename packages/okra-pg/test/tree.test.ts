@@ -72,7 +72,7 @@ test.serial("compare pg to sqlite(100) with interleaved deletes", async (t) => {
 
 	for (let i = 0; i < 100; i++) {
 		const [key] = getVal(i)
-		t.deepEqual(await tree.getValue(key), sqliteTree.getValue(key))
+		t.deepEqual(await tree.get(key), sqliteTree.get(key))
 	}
 
 	const pgRoot = await tree.getRoot()
@@ -104,10 +104,10 @@ test.serial("tree.entries() returns correct values", async (t) => {
 
 	t.plan(100)
 	let i = 0
-	for await (const node of tree.entries(null, null)) {
+	for await (const [nodeKey, nodeValue] of tree.entries(null, null)) {
 		const [key, value] = getVal(i)
-		if (node === null || node.value === null) throw new Error("tree.entries() never returns null")
-		t.is(hex(node.value), hex(value))
+		if (nodeValue === null) throw new Error("tree.entries() should never return null nodes")
+		t.is(hex(nodeValue), hex(value))
 		i++
 	}
 	await tree.close()
