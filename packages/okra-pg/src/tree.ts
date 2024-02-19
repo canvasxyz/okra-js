@@ -275,8 +275,6 @@ $$ LANGUAGE plpgsql;
 	}
 
 	constructor(client: pg.Client, options: { K?: number; Q?: number; prefix?: string } = {}) {
-		// super(store, { K: options.K, Q: options.Q })
-
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width
@@ -332,12 +330,26 @@ $$ LANGUAGE plpgsql;
 
 	public async *nodes(
 		level: number,
-		lowerBound: Bound<Key> | null = null,
-		upperBound: Bound<Key> | null = null,
+		lowerBound: Bound<Uint8Array> | null = null,
+		upperBound: Bound<Uint8Array> | null = null,
 		{ reverse = false }: { reverse?: boolean | undefined } = {},
 	): AsyncGenerator<Node, void, undefined> {
-		throw new Error("unimplemented") // TODO
-		// yield* super.nodes(level, lowerBound, upperBound, { reverse })
+		const query =
+			`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = $1 ` +
+			(!lowerBound ? "AND $2::bytea IS NULL " : lowerBound.inclusive ? `AND key >= $2 ` : `AND key > $2 `) +
+			(!upperBound ? "AND $3::bytea IS NULL " : upperBound.inclusive ? `AND key <= $3 ` : `AND key < $3 `) +
+			`AND key IS NOT NULL ORDER BY key ${reverse ? "DESC" : "ASC"}`
+
+		const cursor = await this.client.query(new Cursor(query, [level, lowerBound?.key, upperBound?.key]))
+
+		// TODO: idiomatic
+		while (true) {
+			const nodes = await cursor.read(10)
+			if (nodes.length === 0) return
+			for (const leaf of nodes) {
+				yield leaf
+			}
+		}
 	}
 
 	public async *entries(
@@ -345,21 +357,9 @@ $$ LANGUAGE plpgsql;
 		upperBound: Bound<Uint8Array> | null,
 		options: { reverse?: boolean | undefined } = {},
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
-		const query =
-			`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 ` +
-			(!lowerBound ? "AND $1::bytea IS NULL " : lowerBound.inclusive ? `AND key >= $1 ` : `AND key > $1 `) +
-			(!upperBound ? "AND $2::bytea IS NULL " : upperBound.inclusive ? `AND key <= $2 ` : `AND key < $2 `) +
-			`AND key IS NOT NULL ORDER BY key ${options.reverse ? "DESC" : "ASC"}`
-
-		const cursor = await this.client.query(new Cursor(query, [lowerBound?.key, upperBound?.key]))
-
-		while (true) {
-			const nodes = (await cursor.read(10)) as NodeRecord[]
-			if (nodes.length === 0) return
-			for (const leaf of nodes) {
-				assert(leaf.key !== null && leaf.value !== null, "invalid leaf entry")
-				yield [leaf.key, leaf.value]
-			}
+		for await (const node of this.nodes(0, lowerBound, upperBound, options)) {
+			assert(node !== null && node.key !== null && node.value !== undefined, "invalid leaf entry")
+			yield [node.key, node.value]
 		}
 	}
 
