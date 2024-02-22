@@ -17,10 +17,10 @@ export class PostgresTree implements KeyValueStore, Source, Target {
 	private readonly LEAF_ANCHOR_HASH: Uint8Array
 	private readonly prefix: string
 
-	private readonly client: pg.Client
+	private readonly client: pg.Client | pg.PoolClient
 
 	public static async initialize(
-		client: pg.Client,
+		client: pg.Client | pg.PoolClient,
 		options: { K?: number; Q?: number; clear?: boolean; prefix?: string } = {},
 	) {
 		if (options.prefix !== undefined && options.prefix.match(/^[A-Za-z]+$/) === null) {
@@ -29,8 +29,6 @@ export class PostgresTree implements KeyValueStore, Source, Target {
 
 		const prefix = options.prefix ?? ""
 		const tree = new PostgresTree(client, options)
-
-		await tree.client.connect()
 
 		await tree.client.query(
 			`--sql
@@ -270,11 +268,9 @@ $$ LANGUAGE plpgsql;
 		return tree
 	}
 
-	public async close() {
-		await this.client.end()
-	}
+	public async close() {}
 
-	constructor(client: pg.Client, options: { K?: number; Q?: number; prefix?: string } = {}) {
+	constructor(client: pg.Client | pg.PoolClient, options: { K?: number; Q?: number; prefix?: string } = {}) {
 		this.client = client
 		this.K = options.K ?? 16 // key size
 		this.Q = options.Q ?? 32 // target width

@@ -17,9 +17,12 @@ const getVal = (index: number) => {
 	return [key, value]
 }
 
-const getTree = async ({ prefix, items }: { prefix?: string; items?: number } = {}) => {
+const getTree = async ({ prefix, items }: { prefix?: string; items?: number } = {}): Promise<
+	[PostgresTree, pg.Client]
+> => {
 	const path = "postgresql://localhost:5432/test" // TODO
 	const client = new pg.Client(path)
+	await client.connect()
 
 	const tree = await PostgresTree.initialize(client, { K: 16, Q: 4, clear: true, prefix })
 
@@ -30,7 +33,7 @@ const getTree = async ({ prefix, items }: { prefix?: string; items?: number } = 
 		}
 	}
 
-	return tree
+	return [tree, client]
 }
 
 const getSqliteTree = () => {
@@ -39,7 +42,7 @@ const getSqliteTree = () => {
 }
 
 test.serial("compare pg to sqlite(1000)", async (t) => {
-	const tree = await getTree()
+	const [tree, client] = await getTree()
 	const sqliteTree = getSqliteTree()
 
 	for (let i = 0; i < 1000; i++) {
@@ -50,12 +53,13 @@ test.serial("compare pg to sqlite(1000)", async (t) => {
 
 	const pgRoot = await tree.getRoot()
 	await tree.close()
+	await client.end()
 	t.deepEqual(pgRoot, sqliteTree.getRoot())
 	t.pass()
 })
 
 test.serial("compare pg to sqlite(100) with interleaved deletes", async (t) => {
-	const tree = await getTree()
+	const [tree, client] = await getTree()
 	const sqliteTree = getSqliteTree()
 
 	for (let i = 0; i < 100; i++) {
@@ -77,13 +81,14 @@ test.serial("compare pg to sqlite(100) with interleaved deletes", async (t) => {
 
 	const pgRoot = await tree.getRoot()
 	await tree.close()
+	await client.end()
 	t.deepEqual(pgRoot, sqliteTree.getRoot())
 	t.pass()
 })
 
 test.serial("create two trees with different prefixes", async (t) => {
-	const tree1 = await getTree({ prefix: "ones" })
-	const tree2 = await getTree({ prefix: "twos", items: 20 })
+	const [tree1, client1] = await getTree({ prefix: "ones" })
+	const [tree2, client2] = await getTree({ prefix: "twos", items: 20 })
 
 	t.plan(20)
 
@@ -97,10 +102,12 @@ test.serial("create two trees with different prefixes", async (t) => {
 
 	await tree1.close()
 	await tree2.close()
+	await client1.end()
+	await client2.end()
 })
 
 test.serial("tree.entries() returns correct values", async (t) => {
-	const tree = await getTree({ items: 100 })
+	const [tree, client] = await getTree({ items: 100 })
 
 	t.plan(100)
 	let i = 0
@@ -111,10 +118,11 @@ test.serial("tree.entries() returns correct values", async (t) => {
 		i++
 	}
 	await tree.close()
+	await client.end()
 })
 
 test.serial("tree.entries() returns expected number of values with various bounds", async (t) => {
-	const tree = await getTree({ items: 100 })
+	const [tree, client] = await getTree({ items: 100 })
 
 	const len = async (a: AsyncIterable<any>) => {
 		const result = []
@@ -134,4 +142,5 @@ test.serial("tree.entries() returns expected number of values with various bound
 	t.is(await len(tree.entries({ key: getVal(0)[0], inclusive: false }, { key: getVal(17)[0], inclusive: true })), 17)
 
 	await tree.close()
+	await client.end()
 })
