@@ -16,11 +16,11 @@ export class PostgresStore implements KeyValueStore {
 			throw new Error("table name must be alphabetical")
 		}
 
-		await client.query(`CREATE TABLE IF NOT EXISTS ${options.table} (key BYTEA NOT NULL UNIQUE, value BYTEA);`)
-
 		if (options.clear) {
-			await client.query(`TRUNCATE ${options.table};`)
+			await client.query(`DROP TABLE IF EXISTS ${options.table};`)
 		}
+
+		await client.query(`CREATE TABLE IF NOT EXISTS ${options.table} (key BYTEA NOT NULL UNIQUE, value BYTEA);`)
 
 		return new PostgresStore(client, options.table)
 	}
