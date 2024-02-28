@@ -57,6 +57,22 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 		}
 	}
 
+	public async getMany(keys: Uint8Array[]): Promise<Array<Uint8Array | null>> {
+		return Promise.all(
+			keys.map((key) =>
+				this.getNode(0, key).then((node: Node | null) => {
+					if (node === null) {
+						return null
+					} else if (node.value !== undefined) {
+						return node.value
+					} else {
+						throw new Error("Internal error - missing leaf value")
+					}
+				}),
+			),
+		)
+	}
+
 	public async set(key: Uint8Array, value: Uint8Array): Promise<void> {
 		this.log(`set(%h, %h)`, key, value)
 

@@ -324,6 +324,14 @@ $$ LANGUAGE plpgsql;
 		return rows[0] ? rows[0].value : null
 	}
 
+	public async getMany(keys: Uint8Array[]): Promise<Uint8Array[]> {
+		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 AND key IN $1`, [
+			keys,
+		])
+		console.log(rows)
+		return rows // [0] ? rows[0].value : null
+	}
+
 	public async *nodes(
 		level: number,
 		lowerBound: Bound<Uint8Array> | null = null,
