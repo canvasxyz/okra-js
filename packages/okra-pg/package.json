@@ -1,7 +1,7 @@
 {
 	"name": "@canvas-js/okra-pg",
 	"description": "Okra backed by Postgres",
-	"version": "0.0.1-next.1",
+	"version": "0.0.1-next.2",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
