@@ -371,7 +371,7 @@ $$ LANGUAGE plpgsql;
 	private static size = new ArrayBuffer(4)
 	private static view = new DataView(PostgresTree.size)
 
-	private hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
+	public hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
 		const hash = sha256.create()
 		PostgresTree.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(PostgresTree.size))
