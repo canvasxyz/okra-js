@@ -8,7 +8,6 @@ import { Key, Node, assert } from "@canvas-js/okra"
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
 export class Tree {
-	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
 	private readonly LIMIT_KEY: Uint8Array
@@ -26,8 +25,7 @@ export class Tree {
 		selectAnchorSibling: sqlite.Statement<{ level: number }>
 	}
 
-	constructor(path: string | null = null, options: { K?: number; Q?: number } = {}) {
-		this.K = options.K ?? 16
+	constructor(path: string | null = null, options: { Q?: number } = {}) {
 		this.Q = options.Q ?? 32
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
@@ -43,19 +41,19 @@ export class Tree {
 		this.statements = {
 			insert: this.db.prepare(`INSERT INTO nodes VALUES (:level, :key, :hash, :value)`),
 			update: this.db.prepare(
-				`UPDATE nodes SET hash = :hash, value = :value WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`,
+				`UPDATE nodes SET hash = :hash, value = :value WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
 			),
 			delete: this.db.prepare(
-				`DELETE FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`,
+				`DELETE FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
 			),
 			select: this.db.prepare(
-				`SELECT * FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`,
+				`SELECT * FROM nodes WHERE level = :level AND ((key ISNULL AND :key ISNULL) OR (key = :key))`
 			),
 
 			selectRoot: this.db.prepare(`SELECT * FROM nodes ORDER BY level DESC LIMIT 1`),
 
 			selectFirstSibling: this.db.prepare(
-				`SELECT * FROM nodes WHERE level = :level AND (key ISNULL OR (key <= :key AND hash < :limit)) ORDER BY key DESC LIMIT 1`,
+				`SELECT * FROM nodes WHERE level = :level AND (key ISNULL OR (key <= :key AND hash < :limit)) ORDER BY key DESC LIMIT 1`
 			),
 
 			selectChildren: this.db.prepare(
@@ -63,11 +61,11 @@ export class Tree {
 					key ISNULL OR key < (
 						SELECT key FROM nodes WHERE level = :level - 1 AND key NOTNULL AND (:key ISNULL OR key > :key) AND hash < :limit ORDER BY key LIMIT 1
 					) OR NOT EXISTS (SELECT 1 FROM nodes WHERE level = :level - 1 AND key NOTNULL AND (:key ISNULL OR key > :key) AND hash < :limit)
-				) ORDER BY key`,
+				) ORDER BY key`
 			),
 
 			selectAnchorSibling: this.db.prepare(
-				`SELECT key FROM nodes WHERE level = :level AND key NOTNULL ORDER BY key LIMIT 1`,
+				`SELECT key FROM nodes WHERE level = :level AND key NOTNULL ORDER BY key LIMIT 1`
 			),
 		}
 
@@ -215,6 +213,7 @@ export class Tree {
 		for (const child of children) {
 			hash.update(child.hash)
 		}
+
 		return hash.digest()
 	}
 
