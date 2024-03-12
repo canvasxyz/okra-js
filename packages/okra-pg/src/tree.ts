@@ -3,7 +3,7 @@ import Cursor from "pg-cursor"
 
 import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
-import { Tree, Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@canvas-js/okra"
+import { Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
@@ -19,7 +19,7 @@ export class PostgresTree implements KeyValueStore, Source, Target {
 
 	public static async initialize(
 		client: pg.Client | pg.PoolClient,
-		options: { K?: number; Q?: number; clear?: boolean; prefix?: string } = {},
+		options: { K?: number; Q?: number; clear?: boolean; prefix?: string } = {}
 	) {
 		if (options.prefix !== undefined && options.prefix.match(/^[A-Za-z]+$/) === null) {
 			throw new Error("prefix must be alphabetical")
@@ -133,10 +133,10 @@ CREATE OR REPLACE FUNCTION _okra_getchildren(level_ INTEGER, key_ BYTEA) RETURNS
     SELECT level, key, hash, value FROM _okra_nodes WHERE level = level_ - 1 AND (cast(key_ as bytea) ISNULL OR (key NOTNULL AND key >= key_)) AND (
 				key ISNULL OR key < (
 SELECT key FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
-				tree.LIMIT_KEY,
+				tree.LIMIT_KEY
 			)}', 'hex') ORDER BY key ASC NULLS FIRST LIMIT 1
             ) OR NOT EXISTS (SELECT 1 FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
-							tree.LIMIT_KEY,
+							tree.LIMIT_KEY
 						)}', 'hex'))
     ) ORDER BY key ASC NULLS FIRST
 $$ LANGUAGE SQL;
@@ -152,7 +152,7 @@ DROP FUNCTION IF EXISTS _okra_getfirstsibling(INTEGER, BYTEA);
 -- TODO: return self if _okra_getfirstsibling is called on an anchor node
 CREATE OR REPLACE FUNCTION _okra_getfirstsibling(level_ INTEGER, key_ BYTEA) RETURNS TABLE(level INTEGER, key BYTEA, hash BYTEA) AS $$
     SELECT level, key, hash FROM _okra_nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < decode('${hex(
-			tree.LIMIT_KEY,
+			tree.LIMIT_KEY
 		)}', 'hex'))) ORDER BY key DESC NULLS LAST LIMIT 1
 $$ LANGUAGE SQL;
 
@@ -249,7 +249,7 @@ BEGIN
   );
 END
 $$ LANGUAGE plpgsql;
-`.replace(/_okra_/g, `${prefix}_okra_`),
+`.replace(/_okra_/g, `${prefix}_okra_`)
 		)
 
 		if (options.clear) {
@@ -326,7 +326,7 @@ $$ LANGUAGE plpgsql;
 		level: number,
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		{ reverse = false }: { reverse?: boolean | undefined } = {},
+		{ reverse = false }: { reverse?: boolean | undefined } = {}
 	): AsyncGenerator<Node, void, undefined> {
 		const query =
 			`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = $1 ` +
@@ -349,7 +349,7 @@ $$ LANGUAGE plpgsql;
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null,
 		upperBound: Bound<Uint8Array> | null,
-		options: { reverse?: boolean | undefined } = {},
+		options: { reverse?: boolean | undefined } = {}
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		for await (const node of this.nodes(0, lowerBound, upperBound, options)) {
 			assert(node !== null && node.key !== null && node.value !== undefined, "invalid leaf entry")

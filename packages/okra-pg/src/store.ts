@@ -1,11 +1,7 @@
 import pg from "pg"
 import Cursor from "pg-cursor"
 
-import { sha256 } from "@noble/hashes/sha256"
-import { bytesToHex as hex } from "@noble/hashes/utils"
-import { Tree, Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@canvas-js/okra"
-
-type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
+import { Bound, KeyValueStore, assert } from "@canvas-js/okra"
 
 export class PostgresStore implements KeyValueStore {
 	private readonly client: pg.Client | pg.PoolClient
@@ -38,7 +34,7 @@ export class PostgresStore implements KeyValueStore {
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null,
 		upperBound: Bound<Uint8Array> | null,
-		options: { reverse?: boolean | undefined } = {},
+		options: { reverse?: boolean | undefined } = {}
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		const query =
 			`SELECT * FROM ${this.table} WHERE ` +
@@ -63,7 +59,7 @@ export class PostgresStore implements KeyValueStore {
 	public async set(key: Uint8Array, value: Uint8Array) {
 		await this.client.query(
 			`INSERT INTO ${this.table} (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
-			[key, value],
+			[key, value]
 		)
 	}
 
