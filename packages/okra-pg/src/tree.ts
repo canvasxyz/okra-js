@@ -7,8 +7,6 @@ import { Tree, Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
-const H = 16
-
 export class PostgresTree implements KeyValueStore, Source, Target {
 	private readonly K: number
 	private readonly Q: number
