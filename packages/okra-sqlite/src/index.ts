@@ -1,7 +1,6 @@
 import type * as sqlite from "better-sqlite3"
 import Database from "better-sqlite3"
 
-import { blake3 } from "@noble/hashes/blake3"
 import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 import { Key, Node, assert } from "@canvas-js/okra"
