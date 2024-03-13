@@ -15,7 +15,10 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 
 	private readonly log = debug("okra:tree")
 
-	protected constructor(public readonly store: KeyValueStore, options: Partial<Metadata> = {}) {
+	protected constructor(
+		public readonly store: KeyValueStore,
+		options: Partial<Metadata> = {},
+	) {
 		const metadata = { K: options.K ?? DEFAULT_K, Q: options.Q ?? DEFAULT_Q }
 		super(store, metadata)
 	}
@@ -23,7 +26,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		{ reverse = false }: { reverse?: boolean } = {}
+		{ reverse = false }: { reverse?: boolean } = {},
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		const lowerKeyBound = lowerBound
 			? { key: NodeStore.createEntryKey(0, lowerBound.key), inclusive: lowerBound.inclusive }
