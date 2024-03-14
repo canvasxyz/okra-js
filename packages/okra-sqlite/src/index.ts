@@ -3,11 +3,12 @@ import Database from "better-sqlite3"
 
 import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
-import { Key, Node, assert } from "@canvas-js/okra"
+import { DEFAULT_K, DEFAULT_Q, Key, Node, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
 export class Tree {
+	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
 	private readonly LIMIT_KEY: Uint8Array
@@ -25,8 +26,9 @@ export class Tree {
 		selectAnchorSibling: sqlite.Statement<{ level: number }>
 	}
 
-	constructor(path: string | null = null, options: { Q?: number } = {}) {
-		this.Q = options.Q ?? 32
+	constructor(path: string | null = null, options: { K?: number; Q?: number } = {}) {
+		this.Q = options.Q ?? DEFAULT_Q
+		this.K = options.K ?? DEFAULT_K
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
