@@ -1,4 +1,4 @@
-import { blake3 } from "@noble/hashes/blake3"
+import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import type { Metadata, Key, Node, KeyValueStore, Target, Bound, Source } from "./interface.js"
@@ -15,10 +15,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 
 	private readonly log = debug("okra:tree")
 
-	protected constructor(
-		public readonly store: KeyValueStore,
-		options: Partial<Metadata> = {},
-	) {
+	protected constructor(public readonly store: KeyValueStore, options: Partial<Metadata> = {}) {
 		const metadata = { K: options.K ?? DEFAULT_K, Q: options.Q ?? DEFAULT_Q }
 		super(store, metadata)
 	}
@@ -26,7 +23,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 	public async *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		{ reverse = false }: { reverse?: boolean } = {},
+		{ reverse = false }: { reverse?: boolean } = {}
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		const lowerKeyBound = lowerBound
 			? { key: NodeStore.createEntryKey(0, lowerBound.key), inclusive: lowerBound.inclusive }
@@ -185,7 +182,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 	private async getHash(level: number, key: Key): Promise<Uint8Array> {
 		this.log("hashing %d %k", level, key)
 
-		const hash = blake3.create({ dkLen: this.metadata.K })
+		const hash = sha256.create()
 		for await (const node of this.nodes(level - 1, { key, inclusive: true })) {
 			if (lessThan(key, node.key) && this.isBoundary(node)) {
 				break
@@ -195,7 +192,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 			hash.update(node.hash)
 		}
 
-		return hash.digest()
+		return hash.digest().subarray(0, this.metadata.K)
 	}
 
 	/**

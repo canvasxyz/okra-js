@@ -1,4 +1,4 @@
-import { blake3 } from "@noble/hashes/blake3"
+import { sha256 } from "@noble/hashes/sha256"
 
 import { NodeStore } from "./store.js"
 import { Metadata, Key, Node, KeyValueStore } from "./interface.js"
@@ -45,24 +45,26 @@ export class Builder extends NodeStore {
 			assert(node.level === level && node.key === null, "first node was not an anchor")
 
 			let key: Key = node.key
-			let hash = blake3.create({ dkLen: this.metadata.K })
+			let hash = sha256.create()
 			hash.update(node.hash)
 
 			while (true) {
 				node = await next()
 
 				if (node === null) {
-					await this.setNode({ level: level + 1, key, hash: hash.digest() })
+					const result = hash.digest().subarray(0, this.metadata.K)
+					await this.setNode({ level: level + 1, key, hash: result })
 					nodeCount++
 					break
 				}
 
 				assert(node.level === level, "unexpected node level")
 				if (this.isBoundary(node)) {
-					await this.setNode({ level: level + 1, key, hash: hash.digest() })
+					const result = hash.digest().subarray(0, this.metadata.K)
+					await this.setNode({ level: level + 1, key, hash: result })
 					nodeCount++
 					key = node.key
-					hash = blake3.create({ dkLen: this.metadata.K })
+					hash = sha256.create()
 					hash.update(node.hash)
 				} else {
 					hash.update(node.hash)

@@ -32,7 +32,7 @@ export class Tree {
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
-		this.LEAF_ANCHOR_HASH = sha256.create().digest()
+		this.LEAF_ANCHOR_HASH = sha256.create().digest().subarray(0, this.K)
 
 		this.db = new Database(path ?? ":memory:")
 
@@ -216,7 +216,7 @@ export class Tree {
 			hash.update(child.hash)
 		}
 
-		return hash.digest()
+		return hash.digest().subarray(0, this.K)
 	}
 
 	private getNode(level: number, key: Key): Node | null {
@@ -261,7 +261,7 @@ export class Tree {
 		Tree.view.setUint32(0, value.length)
 		hash.update(new Uint8Array(Tree.size))
 		hash.update(value)
-		return hash.digest()
+		return hash.digest().subarray(0, this.K)
 	}
 
 	/**

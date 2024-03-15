@@ -1,12 +1,11 @@
-import test, { ExecutionContext } from "ava"
-import { text } from "node:stream/consumers"
+import test from "ava"
 
 import pg from "pg"
+import { blake3 } from "@noble/hashes/blake3"
+import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { PostgresTree } from "@canvas-js/okra-pg"
 import { Tree as SqliteTree } from "@canvas-js/okra-sqlite"
-import { blake3 } from "@noble/hashes/blake3"
-import { bytesToHex as hex } from "@noble/hashes/utils"
 
 const getVal = (index: number) => {
 	const buffer = new ArrayBuffer(4)

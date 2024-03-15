@@ -25,7 +25,7 @@ async function openTree(t: ExecutionContext) {
 test("open tree", async (t) => {
 	const tree = await openTree(t)
 	const root = await tree.getRoot()
-	t.deepEqual(root, { level: 0, key: null, hash: hexToBytes("af1349b9f5f9a1a6a0404dea36dcc949") })
+	t.deepEqual(root, { level: 0, key: null, hash: hexToBytes("e3b0c44298fc1c149afbf4c8996fb924") })
 })
 
 test("get/set/delete", async (t) => {

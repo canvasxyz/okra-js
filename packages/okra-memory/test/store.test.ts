@@ -17,5 +17,5 @@ test("get/set/delete", async (t) => {
 test("open tree", async (t) => {
 	const tree = await MemoryTree.open()
 	const root = await tree.getRoot()
-	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from("af1349b9f5f9a1a6a0404dea36dcc949", "hex") })
+	t.deepEqual(root, { level: 0, key: null, hash: Buffer.from("e3b0c44298fc1c149afbf4c8996fb924", "hex") })
 })

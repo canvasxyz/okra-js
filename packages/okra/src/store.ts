@@ -1,4 +1,4 @@
-import { blake3 } from "@noble/hashes/blake3"
+import { sha256 } from "@noble/hashes/sha256"
 
 import type { Key, Node, KeyValueStore, Entry, Metadata, Bound } from "./interface.js"
 import { OKRA_VERSION } from "./constants.js"
@@ -143,14 +143,14 @@ export class NodeStore {
 	private static view = new DataView(NodeStore.size)
 
 	public hashEntry(key: Uint8Array, value: Uint8Array): Uint8Array {
-		const hash = blake3.create({ dkLen: this.metadata.K })
+		const hash = sha256.create()
 		NodeStore.view.setUint32(0, key.length)
 		hash.update(new Uint8Array(NodeStore.size))
 		hash.update(key)
 		NodeStore.view.setUint32(0, value.length)
 		hash.update(new Uint8Array(NodeStore.size))
 		hash.update(value)
-		return hash.digest()
+		return hash.digest().subarray(0, this.metadata.K)
 	}
 
 	protected isBoundary(node: Node): boolean {
@@ -158,5 +158,5 @@ export class NodeStore {
 		return view.getUint32(0) < this.limit
 	}
 
-	protected getLeafAnchorHash = () => blake3(new Uint8Array([]), { dkLen: this.metadata.K })
+	protected getLeafAnchorHash = () => sha256(new Uint8Array([])).subarray(0, this.metadata.K)
 }
