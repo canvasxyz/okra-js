@@ -2,7 +2,7 @@ import pg from "pg"
 import Cursor from "pg-cursor"
 
 import { sha256 } from "@noble/hashes/sha256"
-import { bytesToHex as hex } from "@noble/hashes/utils"
+import { bytesToHex } from "@noble/hashes/utils"
 import { Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
@@ -27,6 +27,8 @@ export class PostgresTree implements KeyValueStore, Source, Target {
 
 		const prefix = options.prefix ?? ""
 		const tree = new PostgresTree(client, options)
+
+		const limitKey = bytesToHex(tree.LIMIT_KEY)
 
 		await tree.client.query(
 			`--sql
@@ -124,7 +126,7 @@ $$ LANGUAGE plpgsql;
 DROP FUNCTION IF EXISTS _okra_isboundary(BYTEA);
 
 CREATE OR REPLACE FUNCTION _okra_isboundary(hash BYTEA) RETURNS boolean AS $$
-SELECT hash < decode('${hex(tree.LIMIT_KEY)}', 'hex');
+SELECT hash < decode('${limitKey}', 'hex');
 $$ LANGUAGE SQL;
 
 DROP FUNCTION IF EXISTS _okra_getchildren(INTEGER, BYTEA);
@@ -132,28 +134,23 @@ DROP FUNCTION IF EXISTS _okra_getchildren(INTEGER, BYTEA);
 CREATE OR REPLACE FUNCTION _okra_getchildren(level_ INTEGER, key_ BYTEA) RETURNS TABLE (level integer, key bytea, hash bytea, value bytea) AS $$
     SELECT level, key, hash, value FROM _okra_nodes WHERE level = level_ - 1 AND (cast(key_ as bytea) ISNULL OR (key NOTNULL AND key >= key_)) AND (
 				key ISNULL OR key < (
-SELECT key FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
-				tree.LIMIT_KEY
-			)}', 'hex') ORDER BY key ASC NULLS FIRST LIMIT 1
-            ) OR NOT EXISTS (SELECT 1 FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${hex(
-							tree.LIMIT_KEY
-						)}', 'hex'))
+SELECT key FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${limitKey}', 'hex') ORDER BY key ASC NULLS FIRST LIMIT 1
+            ) OR NOT EXISTS (SELECT 1 FROM _okra_nodes WHERE level = level_ - 1 AND key NOTNULL AND (cast(key_ as bytea) ISNULL OR key > key_) AND hash < decode('${limitKey}', 'hex'))
     ) ORDER BY key ASC NULLS FIRST
 $$ LANGUAGE SQL;
 
 DROP FUNCTION IF EXISTS _okra_gethash(INTEGER, BYTEA);
 
 CREATE OR REPLACE FUNCTION _okra_gethash(level_ INTEGER, key_ BYTEA) RETURNS bytea AS $$
-SELECT sha256(string_agg(hash, '')) FROM (SELECT hash FROM _okra_getchildren(level_, key_)) children;
+SELECT substring(sha256(string_agg(hash, ''::BYTEA)) FROM 1 FOR ${tree.K})
+	FROM (SELECT hash FROM _okra_getchildren(level_, key_)) children;
 $$ LANGUAGE SQL;
 
 DROP FUNCTION IF EXISTS _okra_getfirstsibling(INTEGER, BYTEA);
 
 -- TODO: return self if _okra_getfirstsibling is called on an anchor node
 CREATE OR REPLACE FUNCTION _okra_getfirstsibling(level_ INTEGER, key_ BYTEA) RETURNS TABLE(level INTEGER, key BYTEA, hash BYTEA) AS $$
-    SELECT level, key, hash FROM _okra_nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < decode('${hex(
-			tree.LIMIT_KEY
-		)}', 'hex'))) ORDER BY key DESC NULLS LAST LIMIT 1
+    SELECT level, key, hash FROM _okra_nodes WHERE level = level_ AND (key ISNULL OR (key <= key_ AND hash < decode('${limitKey}', 'hex'))) ORDER BY key DESC NULLS LAST LIMIT 1
 $$ LANGUAGE SQL;
 
 DROP PROCEDURE IF EXISTS _okra_updateanchor(INTEGER);
@@ -276,7 +273,7 @@ $$ LANGUAGE plpgsql;
 		this.LIMIT = Number((1n << 32n) / BigInt(this.Q))
 		this.LIMIT_KEY = new Uint8Array(4)
 		new DataView(this.LIMIT_KEY.buffer, this.LIMIT_KEY.byteOffset, this.LIMIT_KEY.byteLength).setUint32(0, this.LIMIT)
-		this.LEAF_ANCHOR_HASH = sha256.create().digest()
+		this.LEAF_ANCHOR_HASH = sha256.create().digest().subarray(0, this.K)
 	}
 
 	public async getRoot(): Promise<Node> {
@@ -377,13 +374,13 @@ $$ LANGUAGE plpgsql;
 		PostgresTree.view.setUint32(0, value.length)
 		hash.update(new Uint8Array(PostgresTree.size))
 		hash.update(value)
-		return hash.digest()
+		return hash.digest().subarray(0, this.K)
 	}
 
 	public async *print(options: { hashSize?: number } = {}): AsyncIterableIterator<Uint8Array> {
 		const hashSize = options.hashSize ?? 4
 		const slot = "  ".repeat(hashSize)
-		const hash = ({ hash }: Node) => hex(hash.subarray(0, hashSize))
+		const hash = ({ hash }: Node) => bytesToHex(hash.subarray(0, hashSize))
 		const encoder = new TextEncoder()
 
 		const tree = this
@@ -394,7 +391,7 @@ $$ LANGUAGE plpgsql;
 				if (node.key === null) {
 					yield encoder.encode(`│\n`)
 				} else {
-					yield encoder.encode(`│ ${hex(node.key)}\n`)
+					yield encoder.encode(`│ ${bytesToHex(node.key)}\n`)
 				}
 			} else {
 				const children = await tree.getChildren(node.level, node.key)
