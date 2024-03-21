@@ -7,12 +7,12 @@ import { getEnvironment, encode } from "./utils.js"
 
 // Some simple leaf entries we'll use for testing
 
-const anchor = { level: 0, key: null, hash: hex("af1349b9f5f9a1a6a0404dea36dcc949") }
-const a = { level: 0, key: encode("a"), hash: hex("2f26b85f65eb9f7a8ac11e79e710148d"), value: encode("foo") }
-const b = { level: 0, key: encode("b"), hash: hex("684f1047a178e6cf9fff759ba1edec2d"), value: encode("bar") }
-const c = { level: 0, key: encode("c"), hash: hex("56cb13c78823525b08d471b6c1201360"), value: encode("baz") }
-const g = { level: 0, key: encode("g"), hash: hex("0886b4a1f64bce08a7ee27e5040ffdfb"), value: encode("ooo") }
-const h = { level: 0, key: encode("h"), hash: hex("14945a3c44a4227dace558945721e0fb"), value: encode("aaa") }
+const anchor = { level: 0, key: null, hash: hex("e3b0c44298fc1c149afbf4c8996fb924") }
+const a = { level: 0, key: encode("a"), hash: hex("1ff8f70b7ec5106c00461223aeb65155"), value: encode("foo") }
+const b = { level: 0, key: encode("b"), hash: hex("51c6c5d032ae2f766c57e442069c58d2"), value: encode("bar") }
+const c = { level: 0, key: encode("c"), hash: hex("6f74a8aeb1e83ae60d24005607c75467"), value: encode("baz") }
+const g = { level: 0, key: encode("g"), hash: hex("3c98ed85f511097a828976b342053803"), value: encode("ooo") }
+const h = { level: 0, key: encode("h"), hash: hex("f162646345628774f00b8905ee47b015"), value: encode("aaa") }
 
 test("get/set/delete", async (t) => {
 	const env = getEnvironment(t, {})
@@ -51,8 +51,8 @@ test("getRoot/getNode/getChildren", async (t) => {
 
 	await env.read((txn) =>
 		txn.openTree(null, (tree) => {
-			t.deepEqual(tree.getRoot(), { level: 1, key: null, hash: hex("6246b94074d09feb644be1a1c12c1f50") })
-			t.deepEqual(tree.getNode(1, null), { level: 1, key: null, hash: hex("6246b94074d09feb644be1a1c12c1f50") })
+			t.deepEqual(tree.getRoot(), { level: 1, key: null, hash: hex("f8acdc73fb2e1cc001d82a87ce3d2553") })
+			t.deepEqual(tree.getNode(1, null), { level: 1, key: null, hash: hex("f8acdc73fb2e1cc001d82a87ce3d2553") })
 			t.deepEqual(tree.getNode(0, null), anchor)
 			t.deepEqual(tree.getNode(0, a.key), a)
 			t.deepEqual(tree.getNode(0, b.key), b)

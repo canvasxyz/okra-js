@@ -25,13 +25,13 @@ test("open a write txn during an open read txn", async (t) => {
 		t.deepEqual(rootB, {
 			level: 1,
 			key: null,
-			hash: hex("6246b94074d09feb644be1a1c12c1f50"),
+			hash: hex("f8acdc73fb2e1cc001d82a87ce3d2553"),
 		})
 
 		t.deepEqual(treeA.getRoot(), {
 			level: 0,
 			key: null,
-			hash: hex("af1349b9f5f9a1a6a0404dea36dcc949"),
+			hash: hex("e3b0c44298fc1c149afbf4c8996fb924"),
 		})
 
 		t.deepEqual(await readTree(env, (treeC) => treeC.getRoot()), rootB)
