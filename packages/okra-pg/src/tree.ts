@@ -250,10 +250,10 @@ $$ LANGUAGE plpgsql;
 		)
 
 		if (options.clear) {
-			await tree.client.query(`TRUNCATE ${prefix}_okra_nodes`)
+			await tree.client.query<{}>(`TRUNCATE ${prefix}_okra_nodes`)
 		}
 
-		await tree.client.query(`CALL ${prefix}_okra_setnode($1, cast($2 as bytea), $3, $4);`, [
+		await tree.client.query<{}>(`CALL ${prefix}_okra_setnode($1, cast($2 as bytea), $3, $4);`, [
 			0,
 			null,
 			tree.LEAF_ANCHOR_HASH,
@@ -277,8 +277,13 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async getRoot(): Promise<Node> {
-		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_nodes ORDER BY level DESC LIMIT 1`)
-		const { level, key, hash } = rows[0] as NodeRecord
+		const { rows } = await this.client.query<NodeRecord>(
+			`SELECT * FROM ${this.prefix}_okra_nodes ORDER BY level DESC LIMIT 1`
+		)
+
+		assert(rows.length === 1, "missing root node")
+
+		const { level, key, hash } = rows[0]
 		return { level, key, hash }
 	}
 
@@ -287,7 +292,10 @@ $$ LANGUAGE plpgsql;
 			throw new RangeError("Cannot get children of a leaf node")
 		}
 
-		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_getchildren($1, $2);`, [level, key])
+		const { rows } = await this.client.query<NodeRecord>(`SELECT * FROM ${this.prefix}_okra_getchildren($1, $2);`, [
+			level,
+			key,
+		])
 
 		return rows.map(({ level, key, hash, value }) => {
 			if (value === null || value.length === 0) {
@@ -299,12 +307,17 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async getNode(level: number, key: Key): Promise<Node | null> {
-		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_getnode($1, $2);`, [level, key])
-		if (rows[0] === undefined) {
+		const { rows } = await this.client.query<NodeRecord>(`SELECT * FROM ${this.prefix}_okra_getnode($1, $2);`, [
+			level,
+			key,
+		])
+
+		if (rows.length === 0) {
 			return null
 		}
 
-		const { hash, value } = rows[0] as NodeRecord
+		const [{ hash, value }] = rows
+
 		if (value === null) {
 			return { level, key, hash }
 		} else {
@@ -313,10 +326,13 @@ $$ LANGUAGE plpgsql;
 	}
 
 	public async get(key: Uint8Array): Promise<Uint8Array | null> {
-		const { rows } = await this.client.query(`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 AND key = $1`, [
-			key,
-		])
-		return rows[0] ? rows[0].value : null
+		const { rows } = await this.client.query<NodeRecord>(
+			`SELECT * FROM ${this.prefix}_okra_nodes WHERE level = 0 AND key = $1`,
+			[key]
+		)
+
+		const { value } = rows[0] ?? {}
+		return value ?? null
 	}
 
 	public async *nodes(

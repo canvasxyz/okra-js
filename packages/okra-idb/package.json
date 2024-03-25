@@ -19,7 +19,7 @@
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"dependencies": {
-		"@canvas-js/okra": "^0.2.0",
+		"@canvas-js/okra": "^0.3.0",
 		"debug": "^4.3.4"
 	},
 	"devDependencies": {

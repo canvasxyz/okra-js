@@ -18,8 +18,8 @@
 	},
 	"devDependencies": {
 		"@ava/typescript": "^4.1.0",
-		"@types/node": "^20.11.5",
-		"ava": "^6.0.1",
-		"typescript": "^5.3.3"
+		"@types/node": "^20.11.30",
+		"ava": "^6.1.2",
+		"typescript": "^5.4.3"
 	}
 }
