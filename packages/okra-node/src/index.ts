@@ -15,7 +15,6 @@ const target = family === null ? `${arch}-${platform}` : `${arch}-${platform}-${
 
 const require = createRequire(import.meta.url)
 
-// const okra = require(`../build/${target}/okra.node`)
 const okra = require(`../zig-out/lib/${target}/okra.node`)
 
 export interface EnvironmentOptions {
