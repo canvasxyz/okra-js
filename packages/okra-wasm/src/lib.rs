@@ -20,7 +20,7 @@ impl Store {
     }
 
     #[wasm_bindgen]
-    pub fn read(self) -> ReadOnlyTransaction {
+    pub fn read(&self) -> ReadOnlyTransaction {
         ReadOnlyTransaction::new(self.map)
     }
 
@@ -73,6 +73,10 @@ impl ReadWriteTransaction {
 
     pub fn set(&mut self, key: String, value: String) {
         self.txn.insert(key, value);
+    }
+
+    pub fn delete(&mut self, key: String) {
+        self.txn.remove(&key);
     }
 
     pub fn commit(self) {
