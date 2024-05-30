@@ -1,11 +1,10 @@
 use concread::bptree::{BptreeMap, BptreeMapReadTxn, BptreeMapWriteTxn};
 use ouroboros::self_referencing;
-use std::{borrow::BorrowMut, rc::Rc};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct Store {
-    map: Rc<BptreeMap<String, String>>,
+    map: BptreeMap<String, String>
 }
 
 #[wasm_bindgen]
@@ -13,25 +12,25 @@ impl Store {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Store {
         Store {
-            map: Rc::new(BptreeMap::new()),
+            map: BptreeMap::new()
         }
     }
 
     #[wasm_bindgen]
-    pub fn create_read_transaction(&self) -> ReadOnlyTransaction {
-        ReadOnlyTransaction::new(Rc::clone(&self.map), |map| map.read())
+    pub fn create_read_transaction(self) -> ReadOnlyTransaction {
+        ReadOnlyTransaction::new(self.map, |map| map.read())
     }
 
     #[wasm_bindgen]
-    pub fn create_read_write_transaction(&self) -> ReadWriteTransaction {
-        ReadWriteTransaction::new(Rc::clone(&self.map), |map| map.write())
+    pub fn create_read_write_transaction(self) -> ReadWriteTransaction {
+        ReadWriteTransaction::new(self.map, |map| map.write())
     }
 }
 
 #[wasm_bindgen]
 #[self_referencing(pub_extras)]
 pub struct ReadOnlyTransaction {
-    map: Rc<BptreeMap<String, String>>,
+    map: BptreeMap<String, String>,
     #[borrows(map)]
     #[not_covariant]
     txn: BptreeMapReadTxn<'this, String, String>
@@ -51,7 +50,7 @@ impl ReadOnlyTransaction {
 #[wasm_bindgen]
 #[self_referencing(pub_extras)]
 pub struct ReadWriteTransaction {
-    map: Rc<BptreeMap<String, String>>,
+    map: BptreeMap<String, String>,
     #[borrows(mut map)]
     #[not_covariant]
     txn: BptreeMapWriteTxn<'this, String, String>
@@ -59,13 +58,13 @@ pub struct ReadWriteTransaction {
 
 #[wasm_bindgen]
 impl ReadWriteTransaction {
-    pub fn get(&self, key: String) -> Option<String> {
+    pub fn get(self, key: String) -> Option<String> {
         self.with_txn(|txn| {
             txn.get(&key).cloned()
         })
     }
 
-    pub fn set(&mut self, key: String, value: String) {
+    pub fn set(mut self, key: String, value: String) {
         self.with_txn_mut(|txn| {
             txn.insert(key, value);
         });
