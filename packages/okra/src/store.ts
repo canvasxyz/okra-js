@@ -2,6 +2,7 @@ import { sha256 } from "@noble/hashes/sha256"
 
 import type { Key, Node, KeyValueStore, Entry, Metadata, Bound } from "./interface.js"
 import { OKRA_VERSION } from "./constants.js"
+import { assert } from "./utils.js"
 
 /**
  * NodeStore is an internal class that Tree and Builder both extend.
@@ -44,12 +45,12 @@ export class NodeStore {
 		const value = await this.store.get(NodeStore.metadataKey)
 		if (value === null) {
 			return null
-		} else if (value.length === 10) {
-			const view = new DataView(value.buffer, value.byteOffset, value.byteLength)
-			return { K: value[5], Q: view.getUint32(6) }
-		} else {
-			throw new Error("Invalid metadata entry")
 		}
+
+		assert(value.length === 10, "invalid metadata entry")
+
+		const view = new DataView(value.buffer, value.byteOffset, value.byteLength)
+		return { K: value[5], Q: view.getUint32(6) }
 	}
 
 	public async getNode(level: number, key: Key): Promise<Node | null> {
@@ -59,16 +60,12 @@ export class NodeStore {
 	}
 
 	protected async setNode(node: Node): Promise<void> {
-		if (node.hash.byteLength !== this.metadata.K) {
-			throw new Error("Internal error: node hash is not K bytes")
-		}
+		assert(node.hash.byteLength === this.metadata.K, "node hash is not K bytes")
 
 		const entryKey = NodeStore.createEntryKey(node.level, node.key)
 
 		if (node.level === 0 && node.key !== null) {
-			if (node.value === undefined) {
-				throw new Error("Internal error: expected leaf node to have a value")
-			}
+			assert(node.value !== undefined, "expected leaf node to have a value")
 
 			const entryValue = new Uint8Array(new ArrayBuffer(this.metadata.K + node.value.byteLength))
 			entryValue.set(node.hash)
@@ -106,9 +103,7 @@ export class NodeStore {
 	protected parseEntry([entryKey, entryValue]: Entry): Node {
 		const [level, key] = NodeStore.parseEntryKey(entryKey)
 
-		if (entryValue.byteLength < this.metadata.K) {
-			throw new Error("Internal error: entry value is less than K bytes")
-		}
+		assert(entryValue.byteLength >= this.metadata.K, "entry value is less than K bytes")
 
 		const hash = entryValue.subarray(0, this.metadata.K)
 		if (level === 0 && key !== null) {
@@ -119,9 +114,9 @@ export class NodeStore {
 	}
 
 	protected static parseEntryKey(entryKey: Uint8Array): [level: number, key: Key] {
-		if (entryKey.byteLength === 0) {
-			throw new Error("Internal error: empty entry key")
-		} else if (entryKey.byteLength === 1) {
+		assert(entryKey.byteLength > 0, "empty entry key")
+
+		if (entryKey.byteLength === 1) {
 			return [entryKey[0], null]
 		} else {
 			return [entryKey[0], entryKey.subarray(1)]
@@ -131,12 +126,12 @@ export class NodeStore {
 	protected static createEntryKey(level: number, key: Key): Uint8Array {
 		if (key === null) {
 			return new Uint8Array([level])
-		} else {
-			const entryKey = new Uint8Array(new ArrayBuffer(1 + key.length))
-			entryKey[0] = level
-			entryKey.set(key, 1)
-			return entryKey
 		}
+
+		const entryKey = new Uint8Array(new ArrayBuffer(1 + key.length))
+		entryKey[0] = level
+		entryKey.set(key, 1)
+		return entryKey
 	}
 
 	private static size = new ArrayBuffer(4)
