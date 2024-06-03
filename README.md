@@ -195,17 +195,17 @@ Note that the leaf anchor node at `(level = 0, key = null)` doesn't have a value
 
 ### Syncing with a remote source
 
-First, you must have an instance of the `Source` interface for the remote Okra database you want to sync with. If you're exposing the merkle tree via an HTTP API, you'll have to write a little client implementing `Source` that uses `fetch`, or whatever is appropriate for your transport.
+First, you must have an instance of the `SyncSource` interface for the remote Okra database you want to sync with. If you're exposing the merkle tree via an HTTP API, you'll have to write a little client implementing `SyncSource` that uses `fetch`, or whatever is appropriate for your transport.
 
 ```ts
-export interface Source {
+export interface SyncSource {
 	getRoot(): Promise<Node>
 	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
 }
 ```
 
-`Tree` itself implements `Source`, so we can easily demonstrate the sync methods using two local databases.
+`Tree` itself implements `SyncSource`, so we can easily demonstrate the sync methods using two local databases.
 
 ```ts
 import { sha256 } from "@noble/hashes/sha256"
@@ -254,7 +254,7 @@ await collect(sync(source, target))
 // ]
 ```
 
-The `sync` export takes a `Source` and `Target` and returns an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a `Uint8Array`. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
+The `sync` export takes a `SyncSource` and `SyncTarget` and returns an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a `Uint8Array`. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
 
 > ⚠️ Syncing **will fail if the source is concurrently modified**.
 
@@ -273,7 +273,7 @@ Calling `sync(source, target)` does not automatically modify `target` - it only 
 ```ts
 import { sync } from "@canvas-js/okra"
 
-async function pull(source: Source, target: Tree): Promise<void> {
+async function pull(source: SyncSource, target: Tree): Promise<void> {
 	for await (const delta of sync(source, target)) {
 		if (delta.source === null) {
 			continue
@@ -297,7 +297,7 @@ One way of looking at `pull` is that it implements a grow-only set with an effic
 ```ts
 import { sync } from "@canvas-js/okra"
 
-async function copy(source: Source, target: Tree): Promise<void> {
+async function copy(source: SyncSource, target: SyncTree): Promise<void> {
 	for await (const delta of sync(source, target)) {
 		if (delta.source === null) {
 			await target.delete(delta.key)
@@ -316,7 +316,7 @@ Call `copy(source, tree)` to _copy the remote source_, deleting any local entrie
 import { sync } from "@canvas-js/okra"
 
 async function merge(
-	source: Source,
+	source: SyncSource,
 	target: Tree,
 	resolve: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
 ): Promise<void> {
@@ -407,7 +407,7 @@ type Node = {
 // source and target are never both null.
 type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
 
-interface Source {
+interface SyncSource {
 	getRoot(): Promise<Node>
 	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
@@ -415,7 +415,7 @@ interface Source {
 
 type Bound<K> = { key: K; inclusive: boolean }
 
-interface Target extends Source {
+interface SyncTarget extends SyncSource {
 	nodes(
 		level: number,
 		lowerBound?: Bound<Key> | null,
@@ -435,7 +435,7 @@ interface KeyValueStore {
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]>
 }
 
-declare class Tree implements KeyValueStore, Source, Target {
+declare class Tree implements KeyValueStore, SyncSource, SyncTarget {
 	protected constructor(store: KeyValueStore, options?: { K?: number; Q?: number })
 
 	// closes the underlying store
