@@ -13,19 +13,29 @@
         async function run() {
             await init();
 
-
             const tree = new Store();
+            window.tree = tree
 
             const txn = tree.write();
             console.log(txn)
-            console.log(txn.get("hello"))
-            txn.set("hello", "canvas")
-            console.log(txn.get("hello"))
+            txn.set("a", "1")
+            txn.set("b", "2")
+            txn.set("c", "3")
+            txn.set("d", "4")
             txn.commit()
 
+            const txn2 = tree.read();
+            const iter = txn2.entries_range("a", "d");
 
-            const txn2 = tree.write();
-            console.log(txn2.get("hello"))
+            const iterator = {
+                [Symbol.iterator]: () => iter
+            }
+
+            for (const x of iterator) {
+                // try calling 'get' while we are still iterating
+                console.log(txn2.get(x.key))
+                console.log({ key: x.key, value: x.value })
+            }
         }
 
         run();
