@@ -5,7 +5,7 @@ import { familySync } from "detect-libc"
 import { equals } from "uint8arrays"
 import PQueue from "p-queue"
 
-import { KeyValueStore, Bound, Entry, lessThan, Node, Key, Source, Target, Awaitable } from "@canvas-js/okra"
+import { KeyValueStore, Bound, Entry, lessThan, Node, Key, SyncSource, SyncTarget, Awaitable } from "@canvas-js/okra"
 
 const family = familySync()
 
@@ -39,6 +39,21 @@ export class Environment extends okra.Environment {
 		} else {
 			throw new Error("environment closed")
 		}
+	}
+
+	public info(): { mapSize: number; readers: number; maxReaders: number } {
+		return super.info()
+	}
+
+	public stat(): {
+		pageSize: number
+		depth: number
+		branchPages: number
+		leafPages: number
+		overflowPages: number
+		entries: number
+	} {
+		return super.stat()
 	}
 
 	public async resize(mapSize: number) {
@@ -106,19 +121,6 @@ export class Transaction extends okra.Transaction {
 
 		super.commit()
 		this.#open = false
-	}
-
-	public async openTree<T = void>(name: string | null, callback: (tree: Tree) => Awaitable<T>): Promise<T> {
-		if (this.#open === false) {
-			throw new Error("transaction closed")
-		}
-
-		const tree = new Tree(this, name)
-		try {
-			return await callback(tree)
-		} finally {
-			tree.close()
-		}
 	}
 
 	public database(name: string | null = null): Database {
@@ -280,7 +282,20 @@ export interface TreeOptions {
 	name?: string | null
 }
 
-export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
+export class Tree extends okra.Tree implements KeyValueStore, SyncSource, SyncTarget {
+	public static async open<T>(
+		txn: Transaction,
+		name: string | null,
+		callback: (tree: Tree) => Awaitable<T>
+	): Promise<T> {
+		const tree = new Tree(txn, name)
+		try {
+			return await callback(tree)
+		} finally {
+			tree.close()
+		}
+	}
+
 	#open = true
 
 	public constructor(public readonly txn: Transaction, name: string | null) {
@@ -322,7 +337,7 @@ export class Tree extends okra.Tree implements KeyValueStore, Source, Target {
 		}
 	}
 
-	// Source & Target methods
+	// SyncSource & SyncTarget methods
 
 	public getRoot(): Node {
 		return super.getRoot()

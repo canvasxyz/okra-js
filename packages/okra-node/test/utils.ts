@@ -6,8 +6,8 @@ import { nanoid } from "nanoid"
 
 import { ExecutionContext } from "ava"
 
-import { Awaitable, KeyValueStore, Source, Target } from "@canvas-js/okra"
-import { Environment, EnvironmentOptions } from "@canvas-js/okra-node"
+import { Awaitable, KeyValueStore, SyncSource, SyncTarget } from "@canvas-js/okra"
+import { Environment, EnvironmentOptions, Tree } from "@canvas-js/okra-node"
 
 export function getEnvironment(t: ExecutionContext, options: EnvironmentOptions = {}) {
 	const directory = path.resolve(os.tmpdir(), nanoid())
@@ -26,14 +26,14 @@ export const decode = (data: Uint8Array) => decoder.decode(data)
 
 export function readTree<T>(
 	env: Environment,
-	callback: (tree: KeyValueStore & Source & Target) => Awaitable<T>
+	callback: (tree: KeyValueStore & SyncSource & SyncTarget) => Awaitable<T>
 ): Promise<T> {
-	return env.read((txn) => txn.openTree<T>(null, callback))
+	return env.read((txn) => Tree.open<T>(txn, null, callback))
 }
 
 export function writeTree<T>(
 	env: Environment,
-	callback: (tree: KeyValueStore & Source & Target) => Awaitable<T>
+	callback: (tree: KeyValueStore & SyncSource & SyncTarget) => Awaitable<T>
 ): Promise<T> {
-	return env.write((txn) => txn.openTree<T>(null, callback))
+	return env.write((txn) => Tree.open<T>(txn, null, callback))
 }

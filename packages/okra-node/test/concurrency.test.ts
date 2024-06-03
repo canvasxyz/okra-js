@@ -9,7 +9,7 @@ const encode = (value: string) => encoder.encode(value)
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-test("open a write txn during an open read txn", async (t) => {
+test.serial("open a write txn during an open read txn", async (t) => {
 	const env = getEnvironment(t)
 
 	await writeTree(env, () => {})

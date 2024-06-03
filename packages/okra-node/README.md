@@ -44,7 +44,7 @@ await env.write(async (txn) => {
 })
 ```
 
-With a transaction, you can open multiple named _databases_ and/or _trees_. A `Database` is a named database in the LMDB key/value store. A `Tree` is a Okra tree that wraps an underlying `Database`. Trees need to be closed before the transaction commits, so they're only accessible within an `txn.openTree(name, async (tree) => { ... })` callback. Databases don't have to be closed, so `txn.database(name)` returns a class directly.
+With a transaction, you can open multiple named _databases_ and/or _trees_. A `Database` is a named database in the LMDB key/value store. A `Tree` is a Okra tree that wraps an underlying `Database`. Trees need to be closed before the transaction commits, so they're only accessible within a `Tree.open(txn, name, async (tree) => { ... })` callback. Databases don't have to be closed, so `txn.database(name)` returns a class directly.
 
 Both `Database` and `Tree` implement the `KeyValueStore` interface.
 
@@ -52,7 +52,7 @@ Both `Database` and `Tree` implement the `KeyValueStore` interface.
 const auxillaryDB = txn.database("my-auxillary-db")
 auxillaryDB.set(key1, value1)
 
-await txn.openTree("my-okra-tree", async (tree) => {
+await Tree.open(txn, "my-okra-tree", async (tree) => {
 	// ...
 	tree.set(key2, value2)
 	// ...
@@ -64,7 +64,7 @@ await txn.openTree("my-okra-tree", async (tree) => {
 ## API
 
 ```ts
-import { KeyValueStore, Bound, Entry, Node, Key, Source, Target, Awaitable } from "@canvas-js/okra"
+import { KeyValueStore, Bound, Entry, Node, Key, SyncSource, SyncTarget, Awaitable } from "@canvas-js/okra"
 
 export interface EnvironmentOptions {
 	mapSize?: number
@@ -82,12 +82,25 @@ export declare class Environment {
 	public write<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T>
 
 	public resize(mapSize: number): void
+
+	public stat(): {
+		pageSize: number
+		depth: number
+		branchPages: number
+		leafPages: number
+		overflowPages: number
+		entries: number
+	}
+
+	public info(): {
+		mapSize: number
+		readers: number
+		maxReaders: number
+	}
 }
 
 export declare class Transaction {
 	public database(name: string | null = null): Database
-
-	public async openTree(name: string | null, callback: (tree: Tree) => Awaitable<T>): Promise<T>
 }
 
 export declare class Database implements KeyValueStore {
@@ -102,7 +115,13 @@ export declare class Database implements KeyValueStore {
 	): AsyncIterableIterator<Entry>
 }
 
-export declare class Tree implements KeyValueStore, Source, Target {
+export declare class Tree implements KeyValueStore, SyncSource, SyncTarget {
+	public static async open<T>(
+		txn: Transaction,
+		name: string | null,
+		callback: (tree: Tree) => T | Promise<T>
+	): Promise<T>
+
 	public get(key: Uint8Array): Uint8Array | null
 	public set(key: Uint8Array, value: Uint8Array): void
 	public delete(key: Uint8Array): void

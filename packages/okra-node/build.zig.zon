@@ -4,12 +4,12 @@
     .version = "0.1.0",
     .dependencies = .{
         .lmdb = .{
-            .url = "https://github.com/canvasxyz/zig-lmdb/archive/886940a2d04bc661da7defdf5c82d8e447bbd5bf.tar.gz",
-            .hash = "12209858bcdacf486d04fdebe1c46c3efab5cef52cc50d6f534d714b688ca52ca068",
+            .url = "https://github.com/canvasxyz/zig-lmdb/archive/refs/tags/v0.1.0.tar.gz",
+            .hash = "1220d5ca02660a791ea022d60a032ae56b629002d3930117d8047ecf615f012044f7",
         },
         .okra = .{
-            .url = "https://github.com/canvasxyz/okra/archive/cd778e43af4126f38af31b4e0e562b8b8bcaded0.tar.gz",
-            .hash = "122020a2d0e7e6eae58d2ee4305b034aabadcd9da964fc1d8a455309c5e46f00d500",
+            .url = "https://github.com/canvasxyz/okra/archive/refs/tags/v0.1.0.tar.gz",
+            .hash = "1220f801db6bfadc5878bee209f98218328b0a719a623a8ac331bb939dc4341613cc",
         },
     },
 }

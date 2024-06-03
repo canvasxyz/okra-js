@@ -1,5 +1,4 @@
 const std = @import("std");
-const LazyPath = std.Build.LazyPath;
 
 pub fn build(b: *std.Build) void {
     addTarget(b, "x64-linux-glibc/okra.node", .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu });
@@ -8,6 +7,7 @@ pub fn build(b: *std.Build) void {
     addTarget(b, "arm64-linux-musl/okra.node", .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl });
     addTarget(b, "x64-darwin/okra.node", .{ .cpu_arch = .x86_64, .os_tag = .macos });
     addTarget(b, "arm64-darwin/okra.node", .{ .cpu_arch = .aarch64, .os_tag = .macos });
+    // addTarget(b, "x64-win32/okra.node", .{ .cpu_arch = .x86_64, .os_tag = .windows });
 }
 
 fn addTarget(b: *std.Build, name: []const u8, target: std.Target.Query) void {
@@ -16,7 +16,7 @@ fn addTarget(b: *std.Build, name: []const u8, target: std.Target.Query) void {
 
     const okra_node = b.addSharedLibrary(.{
         .name = "okra-node",
-        .root_source_file = LazyPath.relative("napi/lib.zig"),
+        .root_source_file = b.path("napi/lib.zig"),
         .target = b.resolveTargetQuery(target),
         .optimize = .ReleaseSafe,
     });
