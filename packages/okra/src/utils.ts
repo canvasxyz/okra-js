@@ -1,3 +1,5 @@
+import { equals } from "uint8arrays"
+
 import type { Key, Node } from "./interface.js"
 
 export function assert(condition: unknown, message?: string, ...args: any[]): asserts condition {
@@ -29,19 +31,15 @@ export function lessThan(a: Key, b: Key): boolean {
 	return x < y
 }
 
-export const equalArrays = (a: Uint8Array, b: Uint8Array) =>
-	a.length === b.length && a.every((byte, i) => byte === b[i])
-
 export function equalKeys(a: Key, b: Key): boolean {
 	if (a === null || b === null) {
 		return a === null && b === null
 	} else {
-		return equalArrays(a, b)
+		return equals(a, b)
 	}
 }
 
-export const equalNodes = (a: Node, b: Node) =>
-	a.level === b.level && equalKeys(a.key, b.key) && equalArrays(a.hash, b.hash)
+export const equalNodes = (a: Node, b: Node) => a.level === b.level && equalKeys(a.key, b.key) && equals(a.hash, b.hash)
 
 export async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
 	const values: T[] = []
