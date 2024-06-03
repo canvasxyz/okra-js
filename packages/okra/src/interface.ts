@@ -29,13 +29,13 @@ export interface KeyValueStore {
 
 export type Entry = [key: Uint8Array, value: Uint8Array]
 
-export interface Source {
+export interface SyncSource {
 	getRoot(): Awaitable<Node>
 	getNode(level: number, key: Key): Awaitable<Node | null>
 	getChildren(level: number, key: Key): Awaitable<Node[]>
 }
 
-export interface Target extends Source {
+export interface SyncTarget extends SyncSource {
 	nodes(
 		level: number,
 		lowerBound?: Bound<Key> | null,

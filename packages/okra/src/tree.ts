@@ -1,21 +1,25 @@
 import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex as hex } from "@noble/hashes/utils"
 
-import type { Metadata, Key, Node, KeyValueStore, Target, Bound, Source } from "./interface.js"
+import type { Metadata, Key, Node, KeyValueStore, SyncTarget, Bound, SyncSource } from "./interface.js"
 
 import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
 import { debug } from "./format.js"
-import { DEFAULT_K, DEFAULT_Q, MAXIMUM_HEIGHT } from "./constants.js"
+import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
 import { assert, equalKeys, lessThan } from "./utils.js"
 
-export class Tree extends NodeStore implements KeyValueStore, Source, Target {
+interface TreeOptions extends Partial<Metadata> {
+	indexOnly?: boolean
+}
+
+export class Tree extends NodeStore implements KeyValueStore, SyncSource, SyncTarget {
 	private static leafEntryLowerBound = { key: NodeStore.createEntryKey(0, null), inclusive: false }
 	private static leafEntryUpperBound = { key: NodeStore.createEntryKey(1, null), inclusive: false }
 
 	private readonly log = debug("okra:tree")
 
-	protected constructor(public readonly store: KeyValueStore, options: Partial<Metadata> = {}) {
+	protected constructor(public readonly store: KeyValueStore, options: TreeOptions = {}) {
 		const metadata = { K: options.K ?? DEFAULT_K, Q: options.Q ?? DEFAULT_Q }
 		super(store, metadata)
 	}
@@ -174,11 +178,6 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 		throw new Error("Internal error")
 	}
 
-	private async getParent(node: Node): Promise<Node | null> {
-		const { level, key } = await this.getFirstSibling(node)
-		return await this.getNode(level + 1, key)
-	}
-
 	private async getHash(level: number, key: Key): Promise<Uint8Array> {
 		this.log("hashing %d %k", level, key)
 
@@ -199,7 +198,7 @@ export class Tree extends NodeStore implements KeyValueStore, Source, Target {
 	 * Get the root node of the merkle tree. Returns the leaf anchor node if the tree is empty.
 	 */
 	public async getRoot(): Promise<Node> {
-		const upperBound = { key: new Uint8Array([MAXIMUM_HEIGHT]), inclusive: false }
+		const upperBound = { key: NodeStore.metadataKey, inclusive: false }
 		for await (const entry of this.store.entries(null, upperBound, { reverse: true })) {
 			const node = this.parseEntry(entry)
 			assert(node.key === null, "Internal error: unexpected root node key", node)

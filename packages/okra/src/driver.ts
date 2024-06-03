@@ -1,11 +1,12 @@
-import { Node, Key, Source, Target, Delta, Bound } from "./interface.js"
+import { equals } from "uint8arrays"
+import { Node, Key, SyncSource, SyncTarget, Delta, Bound } from "./interface.js"
 
 import { debug } from "./format.js"
-import { assert, equalArrays, equalKeys, equalNodes, lessThan } from "./utils.js"
+import { assert, equalKeys, equalNodes, lessThan } from "./utils.js"
 
 export async function* sync(
-	source: Source,
-	target: Target,
+	source: SyncSource,
+	target: SyncTarget,
 	options?: { sourceOnly?: boolean }
 ): AsyncIterableIterator<Delta> {
 	const driver = new Driver(source, target, options)
@@ -34,8 +35,8 @@ class Driver {
 	private cursor: Bound<Key> | null = null
 
 	constructor(
-		private readonly source: Source,
-		private readonly target: Target,
+		private readonly source: SyncSource,
+		private readonly target: SyncTarget,
 		private readonly options: { sourceOnly?: boolean } = {}
 	) {}
 
@@ -110,7 +111,7 @@ class Driver {
 		this.log("source node: %n", sourceNode)
 		this.log("target node: %n", targetNode)
 
-		if (targetNode !== null && equalArrays(targetNode.hash, sourceNode.hash)) {
+		if (targetNode !== null && equals(targetNode.hash, sourceNode.hash)) {
 			this.log("skipping subtree")
 
 			const nextSibling = await this.getNextSibling(targetNode.level, targetNode.key)
@@ -168,8 +169,8 @@ class Driver {
 				if (targetLeaf === null || lessThan(sourceLeaf.key, targetLeaf.key)) {
 					yield { key: sourceLeaf.key, source: sourceLeaf.value, target: null }
 				} else {
-					assert(equalKeys(sourceLeaf.key, targetLeaf.key))
-					if (!equalArrays(sourceLeaf.hash, targetLeaf.hash)) {
+					assert(equalKeys(sourceLeaf.key, targetLeaf.key), "expected sourceLeaf.key = targetLeaf.key")
+					if (!equals(sourceLeaf.hash, targetLeaf.hash)) {
 						assert(targetLeaf.value !== undefined)
 						yield { key: sourceLeaf.key, source: sourceLeaf.value, target: targetLeaf.value }
 					}

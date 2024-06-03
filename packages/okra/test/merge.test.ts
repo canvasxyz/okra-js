@@ -1,7 +1,7 @@
 import test, { ExecutionContext } from "ava"
 import Prando from "prando"
 
-import { Builder, Source, Tree, sync } from "@canvas-js/okra"
+import { Builder, SyncSource, Tree, sync } from "@canvas-js/okra"
 import { MemoryStore, MemoryTree } from "@canvas-js/okra-memory"
 
 import { getKey, compareEntries } from "./utils.js"
@@ -19,7 +19,7 @@ import { getKey, compareEntries } from "./utils.js"
  */
 
 async function merge(
-	source: Source,
+	source: SyncSource,
 	target: Tree,
 	merge: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
 ): Promise<void> {

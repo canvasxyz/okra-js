@@ -3,9 +3,9 @@ import { bytesToHex as hex } from "@noble/hashes/utils"
 
 import { iota, getKey, compareEntries, random, initialize } from "./utils.js"
 
-import { Source, Tree, sync } from "@canvas-js/okra"
+import { SyncSource, Tree, sync } from "@canvas-js/okra"
 
-async function pull(source: Source, target: Tree): Promise<void> {
+async function pull(source: SyncSource, target: Tree): Promise<void> {
 	for await (const delta of sync(source, target)) {
 		if (delta.source === null) {
 			continue
