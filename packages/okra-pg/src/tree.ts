@@ -3,11 +3,11 @@ import Cursor from "pg-cursor"
 
 import { sha256 } from "@noble/hashes/sha256"
 import { bytesToHex } from "@noble/hashes/utils"
-import { Key, Node, Bound, Source, Target, KeyValueStore, assert } from "@canvas-js/okra"
+import { Key, Node, Bound, SyncSource, SyncTarget, KeyValueStore, assert } from "@canvas-js/okra"
 
 type NodeRecord = { level: number; key: Uint8Array | null; hash: Uint8Array; value: Uint8Array | null }
 
-export class PostgresTree implements KeyValueStore, Source, Target {
+export class PostgresTree implements KeyValueStore, SyncSource, SyncTarget {
 	private readonly K: number
 	private readonly Q: number
 	private readonly LIMIT: number
