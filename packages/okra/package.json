@@ -25,6 +25,7 @@
 	"dependencies": {
 		"@noble/hashes": "^1.4.0",
 		"@types/debug": "^4.1.12",
-		"debug": "^4.3.4"
+		"debug": "^4.3.4",
+		"uint8arrays": "^5.1.0"
 	}
 }
