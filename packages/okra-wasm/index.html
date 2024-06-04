@@ -16,15 +16,24 @@
             const tree = new Store();
             window.tree = tree
 
+            console.log("opening a write transaction")
             const txn = tree.write();
-            console.log(txn)
+            console.log("setting some initial values")
+            console.log("set a -> 1")
             txn.set("a", "1")
+            console.log("set b -> 2")
             txn.set("b", "2")
+            console.log("set c -> 3")
             txn.set("c", "3")
+            console.log("set d -> 4")
             txn.set("d", "4")
+            console.log("saving changes")
             txn.commit()
 
-            const txn2 = tree.read();
+            console.log("opening another write transaction")
+            const txn2 = tree.write();
+
+            console.log("original values:")
             const iter = txn2.entries_range("a", "d");
 
             const iterator = {
@@ -33,9 +42,28 @@
 
             for (const x of iterator) {
                 // try calling 'get' while we are still iterating
-                console.log(txn2.get(x.key))
+                console.log({ key: x.key, value: x.value })
+
+                // also try setting fields while we are iterating
+                txn2.set(x.key, "nothing")
+            }
+
+            // iterate over the entries again
+            console.log("updated values:")
+            const iter2 = txn2.entries_range("a", "d");
+
+            const iterator2 = {
+                [Symbol.iterator]: () => iter2
+            }
+
+            for (const x of iterator2) {
                 console.log({ key: x.key, value: x.value })
             }
+            console.log("saving changes")
+            txn2.commit()
+
+            const txn3 = tree.read()
+            console.log(txn3.get("a"))
         }
 
         run();
