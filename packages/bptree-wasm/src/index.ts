@@ -1,1 +1,1 @@
-export { Store } from "../pkg/index.js"
+export { Store, ReadOnlyTransaction, ReadWriteTransaction, IteratorResult } from "../pkg/index.js"

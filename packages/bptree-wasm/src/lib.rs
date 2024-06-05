@@ -34,7 +34,7 @@ impl Store {
 
 #[wasm_bindgen]
 pub struct ReadOnlyTransaction {
-    txn: *const BptreeMapReadTxn<'static, Vec<u8>, Vec<u8>>
+    txn: *mut BptreeMapReadTxn<'static, Vec<u8>, Vec<u8>>
 }
 
 impl ReadOnlyTransaction {
@@ -56,6 +56,13 @@ impl ReadOnlyTransaction {
         let txn = unsafe { & *self.txn };
         ExternalRangeIterator {
             iter: txn.range(Range { start, end })
+        }
+    }
+
+    pub fn drop(self) {
+        // this consumes/drops the pointer
+        unsafe {
+            drop(Box::from_raw(self.txn));
         }
     }
 }
@@ -105,6 +112,13 @@ impl ReadWriteTransaction {
             Box::from_raw(self.txn).commit();
         }
     }
+
+    pub fn drop(self) {
+        // this consumes/drops the pointer
+        unsafe {
+            drop(Box::from_raw(self.txn));
+        }
+    }
 }
 
 pub type Item = (&'static Vec<u8>, &'static Vec<u8>);
@@ -137,6 +151,24 @@ impl ExternalRangeIterator {
                 done: false,
                 value: Some(KeyValue { key: v1.clone(), value: v2.clone()})
             }
+        }
+    }
+}
+
+pub struct Bad {}
+
+
+#[wasm_bindgen]
+pub struct Outer {
+    data: *mut Bad
+}
+
+#[wasm_bindgen]
+impl Outer {
+    pub fn drop(self) {
+        unsafe {
+            let b = Box::from_raw(self.data);
+            drop(b);
         }
     }
 }
