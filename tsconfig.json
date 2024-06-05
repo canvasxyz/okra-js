@@ -13,6 +13,8 @@
 		{ "path": "./packages/okra-sqlite" },
 		{ "path": "./packages/okra-sqlite/test" },
 		{ "path": "./packages/okra-pg" },
-		{ "path": "./packages/okra-pg/test" }
+		{ "path": "./packages/okra-pg/test" },
+		{ "path": "./packages/okra-wasm" },
+		{ "path": "./packages/okra-wasm/test" }
 	]
 }
