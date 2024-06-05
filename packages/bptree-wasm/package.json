@@ -1,6 +1,6 @@
 {
   "name": "@canvas-js/bptree-wasm",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "Wrapper around the bptree Rust library compiled to WebAssembly",
   "main": "lib/index.js",
   "type": "module",
