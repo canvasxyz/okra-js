@@ -1,6 +1,27 @@
-import { equals } from "uint8arrays"
+import { equals, compare } from "uint8arrays"
 
 import type { Key, Node } from "./interface.js"
+
+export function parseEntryKey(entryKey: Uint8Array): [level: number, key: Key] {
+	assert(entryKey.byteLength > 0, "empty entry key")
+
+	if (entryKey.byteLength === 1) {
+		return [entryKey[0], null]
+	} else {
+		return [entryKey[0], entryKey.subarray(1)]
+	}
+}
+
+export function createEntryKey(level: number, key: Key): Uint8Array {
+	if (key === null) {
+		return new Uint8Array([level])
+	}
+
+	const entryKey = new Uint8Array(new ArrayBuffer(1 + key.length))
+	entryKey[0] = level
+	entryKey.set(key, 1)
+	return entryKey
+}
 
 export function assert(condition: unknown, message?: string, ...args: any[]): asserts condition {
 	if (!condition) {
@@ -15,20 +36,9 @@ export function assert(condition: unknown, message?: string, ...args: any[]): as
 export function lessThan(a: Key, b: Key): boolean {
 	if (a === null || b === null) {
 		return b !== null
+	} else {
+		return compare(a, b) === -1
 	}
-
-	let x = a.length
-	let y = b.length
-
-	for (let i = 0, len = Math.min(x, y); i < len; ++i) {
-		if (a[i] !== b[i]) {
-			x = a[i]
-			y = b[i]
-			break
-		}
-	}
-
-	return x < y
 }
 
 export function equalKeys(a: Key, b: Key): boolean {

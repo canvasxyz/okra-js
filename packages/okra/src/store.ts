@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha256"
 
 import type { Key, Node, KeyValueStore, Entry, Metadata, Bound } from "./interface.js"
 import { OKRA_VERSION } from "./constants.js"
-import { assert } from "./utils.js"
+import { assert, createEntryKey, parseEntryKey } from "./utils.js"
 
 /**
  * NodeStore is an internal class that Tree and Builder both extend.
@@ -54,7 +54,7 @@ export class NodeStore {
 	}
 
 	public async getNode(level: number, key: Key): Promise<Node | null> {
-		const entryKey = NodeStore.createEntryKey(level, key)
+		const entryKey = createEntryKey(level, key)
 		const entryValue = await this.store.get(entryKey)
 		return entryValue && this.parseEntry([entryKey, entryValue])
 	}
@@ -62,7 +62,7 @@ export class NodeStore {
 	protected async setNode(node: Node): Promise<void> {
 		assert(node.hash.byteLength === this.metadata.K, "node hash is not K bytes")
 
-		const entryKey = NodeStore.createEntryKey(node.level, node.key)
+		const entryKey = createEntryKey(node.level, node.key)
 
 		if (node.level === 0 && node.key !== null) {
 			assert(node.value !== undefined, "expected leaf node to have a value")
@@ -77,7 +77,7 @@ export class NodeStore {
 	}
 
 	protected async deleteNode(level: number, key: Key): Promise<void> {
-		const entryKey = NodeStore.createEntryKey(level, key)
+		const entryKey = createEntryKey(level, key)
 		await this.store.delete(entryKey)
 	}
 
@@ -88,12 +88,12 @@ export class NodeStore {
 		{ reverse = false }: { reverse?: boolean } = {}
 	): AsyncIterableIterator<Node> {
 		const lowerKeyBound = lowerBound
-			? { key: NodeStore.createEntryKey(level, lowerBound.key), inclusive: lowerBound.inclusive }
-			: { key: NodeStore.createEntryKey(level, null), inclusive: true }
+			? { key: createEntryKey(level, lowerBound.key), inclusive: lowerBound.inclusive }
+			: { key: createEntryKey(level, null), inclusive: true }
 
 		const upperKeyBound = upperBound
-			? { key: NodeStore.createEntryKey(level, upperBound.key), inclusive: upperBound.inclusive }
-			: { key: NodeStore.createEntryKey(level + 1, null), inclusive: false }
+			? { key: createEntryKey(level, upperBound.key), inclusive: upperBound.inclusive }
+			: { key: createEntryKey(level + 1, null), inclusive: false }
 
 		for await (const entry of this.store.entries(lowerKeyBound, upperKeyBound, { reverse })) {
 			yield this.parseEntry(entry)
@@ -101,7 +101,7 @@ export class NodeStore {
 	}
 
 	protected parseEntry([entryKey, entryValue]: Entry): Node {
-		const [level, key] = NodeStore.parseEntryKey(entryKey)
+		const [level, key] = parseEntryKey(entryKey)
 
 		assert(entryValue.byteLength >= this.metadata.K, "entry value is less than K bytes")
 
@@ -111,27 +111,6 @@ export class NodeStore {
 		} else {
 			return { level, key, hash }
 		}
-	}
-
-	protected static parseEntryKey(entryKey: Uint8Array): [level: number, key: Key] {
-		assert(entryKey.byteLength > 0, "empty entry key")
-
-		if (entryKey.byteLength === 1) {
-			return [entryKey[0], null]
-		} else {
-			return [entryKey[0], entryKey.subarray(1)]
-		}
-	}
-
-	protected static createEntryKey(level: number, key: Key): Uint8Array {
-		if (key === null) {
-			return new Uint8Array([level])
-		}
-
-		const entryKey = new Uint8Array(new ArrayBuffer(1 + key.length))
-		entryKey[0] = level
-		entryKey.set(key, 1)
-		return entryKey
 	}
 
 	private static size = new ArrayBuffer(4)

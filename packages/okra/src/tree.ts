@@ -7,15 +7,13 @@ import { NodeStore } from "./store.js"
 import { Builder } from "./builder.js"
 import { debug } from "./format.js"
 import { DEFAULT_K, DEFAULT_Q } from "./constants.js"
-import { assert, equalKeys, lessThan } from "./utils.js"
+import { assert, createEntryKey, equalKeys, lessThan } from "./utils.js"
 
-interface TreeOptions extends Partial<Metadata> {
-	indexOnly?: boolean
-}
+export interface TreeOptions extends Partial<Metadata> {}
 
-export class Tree extends NodeStore implements KeyValueStore, SyncSource, SyncTarget {
-	private static leafEntryLowerBound = { key: NodeStore.createEntryKey(0, null), inclusive: false }
-	private static leafEntryUpperBound = { key: NodeStore.createEntryKey(1, null), inclusive: false }
+export class Tree extends NodeStore implements SyncSource, SyncTarget {
+	private static leafEntryLowerBound = { key: createEntryKey(0, null), inclusive: false }
+	private static leafEntryUpperBound = { key: createEntryKey(1, null), inclusive: false }
 
 	private readonly log = debug("okra:tree")
 
@@ -30,11 +28,11 @@ export class Tree extends NodeStore implements KeyValueStore, SyncSource, SyncTa
 		{ reverse = false }: { reverse?: boolean } = {}
 	): AsyncIterableIterator<[Uint8Array, Uint8Array]> {
 		const lowerKeyBound = lowerBound
-			? { key: NodeStore.createEntryKey(0, lowerBound.key), inclusive: lowerBound.inclusive }
+			? { key: createEntryKey(0, lowerBound.key), inclusive: lowerBound.inclusive }
 			: Tree.leafEntryLowerBound
 
 		const upperKeyBound = upperBound
-			? { key: NodeStore.createEntryKey(0, upperBound.key), inclusive: upperBound.inclusive }
+			? { key: createEntryKey(0, upperBound.key), inclusive: upperBound.inclusive }
 			: Tree.leafEntryUpperBound
 
 		for await (const entry of this.store.entries(lowerKeyBound, upperKeyBound, { reverse })) {
@@ -233,7 +231,7 @@ export class Tree extends NodeStore implements KeyValueStore, SyncSource, SyncTa
 	 * @returns the new root node
 	 */
 	public async rebuild(): Promise<Node> {
-		const lowerBound = { key: NodeStore.createEntryKey(1, null), inclusive: true }
+		const lowerBound = { key: createEntryKey(1, null), inclusive: true }
 		for await (const [entryKey] of this.store.entries(lowerBound)) {
 			await this.store.delete(entryKey)
 		}
