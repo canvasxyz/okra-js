@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct Store {
-    map: &'static BptreeMap<String, String>
+    map: &'static BptreeMap<Vec<u8>, Vec<u8>>
 }
 
 #[wasm_bindgen]
@@ -34,11 +34,11 @@ impl Store {
 
 #[wasm_bindgen]
 pub struct ReadOnlyTransaction {
-    txn: *const BptreeMapReadTxn<'static, String, String>
+    txn: *const BptreeMapReadTxn<'static, Vec<u8>, Vec<u8>>
 }
 
 impl ReadOnlyTransaction {
-    pub fn new(map: &'static BptreeMap<String, String>) -> ReadOnlyTransaction {
+    pub fn new(map: &'static BptreeMap<Vec<u8>, Vec<u8>>) -> ReadOnlyTransaction {
         ReadOnlyTransaction {
             txn: Box::into_raw(Box::new(map.read()))
         }
@@ -47,12 +47,12 @@ impl ReadOnlyTransaction {
 
 #[wasm_bindgen]
 impl ReadOnlyTransaction {
-    pub fn get(&self, key: String) -> Option<String> {
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         let txn = unsafe { & *self.txn };
         txn.get(&key).cloned()
     }
 
-    pub fn entries_range(&self, start: String, end: String) -> ExternalRangeIterator {
+    pub fn entries_range(&self, start: Vec<u8>, end: Vec<u8>) -> ExternalRangeIterator {
         let txn = unsafe { & *self.txn };
         ExternalRangeIterator {
             iter: txn.range(Range { start, end })
@@ -64,11 +64,11 @@ impl ReadOnlyTransaction {
 
 #[wasm_bindgen]
 pub struct ReadWriteTransaction {
-    txn: *mut BptreeMapWriteTxn<'static, String, String>
+    txn: *mut BptreeMapWriteTxn<'static, Vec<u8>, Vec<u8>>
 }
 
 impl ReadWriteTransaction {
-    pub fn new(map: &'static BptreeMap<String, String>) -> ReadWriteTransaction {
+    pub fn new(map: &'static BptreeMap<Vec<u8>, Vec<u8>>) -> ReadWriteTransaction {
         ReadWriteTransaction {
             txn: Box::into_raw(Box::new(map.write())),
         }
@@ -77,24 +77,24 @@ impl ReadWriteTransaction {
 
 #[wasm_bindgen]
 impl ReadWriteTransaction {
-    pub fn entries_range(&self, start: String, end: String) -> ExternalRangeIterator {
+    pub fn entries_range(&self, start: Vec<u8>, end: Vec<u8>) -> ExternalRangeIterator {
         let txn = unsafe { & *self.txn };
         ExternalRangeIterator {
             iter: txn.range(Range { start, end })
         }
     }
 
-    pub fn get(&self, key: String) -> Option<String> {
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         let txn = unsafe { & *self.txn };
         txn.get(&key).cloned()
     }
 
-    pub fn set(&mut self, key: String, value: String) {
+    pub fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
         let txn = unsafe { &mut *self.txn };
         txn.insert(key, value);
     }
 
-    pub fn delete(&mut self, key: String) {
+    pub fn delete(&mut self, key: Vec<u8>) {
         let txn = unsafe { &mut *self.txn };
         txn.remove(&key);
     }
@@ -107,13 +107,13 @@ impl ReadWriteTransaction {
     }
 }
 
-pub type Item = (&'static String, &'static String);
+pub type Item = (&'static Vec<u8>, &'static Vec<u8>);
 
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Clone)]
 pub struct KeyValue {
-    pub key: String,
-    pub value: String
+    pub key: Vec<u8>,
+    pub value: Vec<u8>
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -125,7 +125,7 @@ pub struct IteratorResult {
 
 #[wasm_bindgen]
 pub struct ExternalRangeIterator{
-    iter: RangeIter<'static, 'static, String, String>
+    iter: RangeIter<'static, 'static, Vec<u8>, Vec<u8>>
 }
 
 #[wasm_bindgen]
