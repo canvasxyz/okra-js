@@ -6,9 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wasm Bptree Example</title>
     <script type="module">
-        import init, { Store } from './pkg/js_concread.js';
+        import init, { Store } from './pkg/bptree_wasm.js';
         // import { blake3 } from 'https://cdn.skypack.dev/@noble/hashes/blake3';
         // import { bytesToHex } from 'https://cdn.skypack.dev/@noble/hashes/utils';
+
+        const encoder = new TextEncoder()
+        const decoder = new TextDecoder()
 
         async function run() {
             await init();
@@ -20,13 +23,13 @@
             const txn = tree.write();
             console.log("setting some initial values")
             console.log("set a -> 1")
-            txn.set("a", "1")
+            txn.set(encoder.encode("a"), encoder.encode("1"))
             console.log("set b -> 2")
-            txn.set("b", "2")
+            txn.set(encoder.encode("b"), encoder.encode("2"))
             console.log("set c -> 3")
-            txn.set("c", "3")
+            txn.set(encoder.encode("c"), encoder.encode("3"))
             console.log("set d -> 4")
-            txn.set("d", "4")
+            txn.set(encoder.encode("d"), encoder.encode("4"))
             console.log("saving changes")
             txn.commit()
 
@@ -34,7 +37,7 @@
             const txn2 = tree.write();
 
             console.log("original values:")
-            const iter = txn2.entries_range("a", "d");
+            const iter = txn2.entries_range(encoder.encode("a"), encoder.encode("d"));
 
             const iterator = {
                 [Symbol.iterator]: () => iter
@@ -42,28 +45,28 @@
 
             for (const x of iterator) {
                 // try calling 'get' while we are still iterating
-                console.log({ key: x.key, value: x.value })
+                console.log({ key: decoder.decode(x.key), value: decoder.decode(x.value) })
 
                 // also try setting fields while we are iterating
-                txn2.set(x.key, "nothing")
+                txn2.set(x.key, encoder.encode("nothing"))
             }
 
             // iterate over the entries again
             console.log("updated values:")
-            const iter2 = txn2.entries_range("a", "d");
+            const iter2 = txn2.entries_range(encoder.encode("a"), encoder.encode("d"));
 
             const iterator2 = {
                 [Symbol.iterator]: () => iter2
             }
 
             for (const x of iterator2) {
-                console.log({ key: x.key, value: x.value })
+                console.log({ key: decoder.decode(x.key), value: decoder.decode(x.value) })
             }
             console.log("saving changes")
             txn2.commit()
 
             const txn3 = tree.read()
-            console.log(txn3.get("a"))
+            console.log(decoder.decode(txn3.get(encoder.encode("a"))))
         }
 
         run();
