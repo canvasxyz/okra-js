@@ -154,21 +154,3 @@ impl ExternalRangeIterator {
         }
     }
 }
-
-pub struct Bad {}
-
-
-#[wasm_bindgen]
-pub struct Outer {
-    data: *mut Bad
-}
-
-#[wasm_bindgen]
-impl Outer {
-    pub fn drop(self) {
-        unsafe {
-            let b = Box::from_raw(self.data);
-            drop(b);
-        }
-    }
-}
