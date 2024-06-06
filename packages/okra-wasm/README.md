@@ -1,13 +1,9 @@
 # okra-wasm
 
-Build the wasm package with
+Okra implementation using [concread::bptree::BptreeMap](https://docs.rs/concread/latest/concread/bptree/struct.BptreeMap.html). BptreeMap is a concurrently readable map structure. This package includes Rust code that is first compiled to wasm.
+
+To build:
 
 ```
-wasm-pack build --target web
-```
-
-And then serve the demo with
-
-```
-python3 -m http.server
+npm run build
 ```
