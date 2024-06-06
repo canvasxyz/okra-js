@@ -3,7 +3,9 @@
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "lib",
-		"rootDir": "src"
+		"rootDir": "src",
+		"module": "esNext",
+		"moduleResolution": "node"
 	},
-	"references": [{ "path": "../okra" }, { "path": "../bptree-wasm" }]
+	"references": [{ "path": "../okra" }]
 }

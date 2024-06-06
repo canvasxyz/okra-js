@@ -1,4 +1,4 @@
-import { ReadOnlyTransaction, ReadWriteTransaction, Store } from "@canvas-js/bptree-wasm"
+import { Store, ReadOnlyTransaction, ReadWriteTransaction } from "../pkg/index.js"
 import { Awaitable, Metadata, Tree, KeyValueStore } from "@canvas-js/okra"
 
 // The purpose of `wrapXTransaction` is to prevent the developer from calling `commit`
@@ -30,7 +30,7 @@ function wrapReadWriteTransaction(txn: ReadWriteTransaction) {
 	}
 }
 
-export class WasmStore extends KeyValueStore {
+export class WasmStore implements KeyValueStore {
 	public readonly db = new Store()
 
 	async read(callback: (txn: ReturnType<typeof wrapReadOnlyTransaction>) => Awaitable<void>) {

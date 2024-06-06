@@ -1,7 +1,6 @@
 {
 	"files": [],
 	"references": [
-		{ "path": "./packages/bptree-wasm" },
 		{ "path": "./packages/okra" },
 		{ "path": "./packages/okra/test" },
 		{ "path": "./packages/okra-idb" },

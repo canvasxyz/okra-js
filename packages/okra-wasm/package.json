@@ -1,27 +1,20 @@
 {
-	"private": true,
-	"name": "@canvas-js/okra-wasm",
-	"version": "0.0.1",
-	"type": "module",
-	"main": "lib/index.js",
-	"types": "lib/index.d.ts",
-	"files": [
-		"lib/**/*.js",
-		"lib/**/*.d.ts"
-	],
-	"engines": {
-		"node": ">=18"
-	},
-	"scripts": {
-		"test": "ava"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git://github.com/canvasxyz/okra-js.git"
-	},
-	"license": "MIT",
-	"dependencies": {
-		"@canvas-js/okra": "^0.3.0",
-		"@canvas-js/bptree-wasm": "^0.0.1"
-	}
+  "name": "@canvas-js/okra-wasm",
+  "version": "0.0.1",
+  "description": "Okra implementation using concread::bptree in wasm",
+  "main": "lib/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "webpack",
+    "server": "webpack serve"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@wasm-tool/wasm-pack-plugin": "^1.7.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.4.5",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.4"
+  }
 }
