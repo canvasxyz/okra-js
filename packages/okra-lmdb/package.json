@@ -1,14 +1,24 @@
 {
-	"name": "@canvas-js/okra-memory",
-	"description": "Temporary Okra database backed by an in-memory red/black tree",
-	"version": "0.4.0",
+	"name": "@canvas-js/okra-lmdb",
+	"description": "Native NodeJS bindings for Okra over LMDB",
+	"version": "0.1.0",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
 	"files": [
+		"lmdb.js",
+		"lmdb.d.ts",
 		"lib/**/*.js",
-		"lib/**/*.d.ts"
+		"lib/**/*.d.ts",
+		"zig-out/lib/**"
 	],
+	"exports": {
+		".": "./lib/index.js",
+		"./lmdb": "./lmdb.js"
+	},
+	"engines": {
+		"node": ">=18"
+	},
 	"scripts": {
 		"test": "ava"
 	},
@@ -20,9 +30,10 @@
 	"license": "MIT",
 	"dependencies": {
 		"@canvas-js/okra": "^0.4.0",
+		"@noble/hashes": "^1.4.0",
 		"@types/debug": "^4.1.12",
 		"debug": "^4.3.5",
-		"functional-red-black-tree": "^1.0.1",
+		"detect-libc": "^2.0.3",
 		"p-queue": "^8.0.1",
 		"uint8arrays": "^5.1.0"
 	}

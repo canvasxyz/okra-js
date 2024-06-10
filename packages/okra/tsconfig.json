@@ -1,5 +1,5 @@
 {
-	"include": ["src", "../okra-memory/src/encoding.ts"],
+	"include": ["src"],
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "lib",

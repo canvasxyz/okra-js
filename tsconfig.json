@@ -3,15 +3,9 @@
 	"references": [
 		{ "path": "./packages/okra" },
 		{ "path": "./packages/okra/test" },
-		{ "path": "./packages/okra-idb" },
-		{ "path": "./packages/okra-idb/test" },
+		{ "path": "./packages/okra-lmdb" },
+		{ "path": "./packages/okra-lmdb/test" },
 		{ "path": "./packages/okra-memory" },
-		{ "path": "./packages/okra-memory/test" },
-		{ "path": "./packages/okra-node" },
-		{ "path": "./packages/okra-node/test" },
-		{ "path": "./packages/okra-sqlite" },
-		{ "path": "./packages/okra-sqlite/test" },
-		{ "path": "./packages/okra-pg" },
-		{ "path": "./packages/okra-pg/test" }
+		{ "path": "./packages/okra-memory/test" }
 	]
 }

@@ -1,9 +1,13 @@
-export type * from "./interface.js"
-export * from "./tree.js"
-export * from "./builder.js"
+export * from "./interface.js"
+export * from "./NodeStore.js"
+export * from "./Builder.js"
+
+export * from "./ReadOnlyTransaction.js"
+export * from "./ReadWriteTransaction.js"
 export * from "./constants.js"
-export * from "./utils.js"
 
-export { sync } from "./driver.js"
+export * from "./sync/index.js"
 
+export { printTree } from "./print.js"
 export { formatKey, formatNode } from "./format.js"
+export { equalKeys, compareKeys } from "./utils.js"

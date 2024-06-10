@@ -25,134 +25,101 @@ Okra is a key/value store augmented with a merkle tree index. You can use it lik
 
 ## Install
 
-The core package `@canvas-js/okra` has a generic tree that must be provided with a backing key/value store.
-
 ```
-npm i @canvas-js/okra
+npm i @canvas-js/okra @canvas-js/okra-lmdb @canvas-js/okra-memory
 ```
 
-The `@canvas-js/okra-idb` and `@canvas-js/okra-memory` instantiate the generic pure-JS tree with an IndexedDB object store and an in-memory red/black tree, respectively. The `@canvas-js/okra-node` package exports compatible native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra).
+The core package `@canvas-js/okra` has a generic tree that must be provided with a backing store.
 
+The `@canvas-js/okra-lmdb` and `@canvas-js/okra-memory` instantiate the generic pure-JS tree with a persistent LMDB database and an in-memory red/black tree, respectively.
+
+```ts
+import { Tree } from "@canvas-js/okra-lmdb"
+
+const tree = new Tree("path/to/db")
+try {
+	// ...
+} finally {
+	tree.close()
+}
 ```
-npm i @canvas-js/okra-idb @canvas-js/okra-memory @canvas-js/okra-node
+
+```ts
+import { Tree } from "@canvas-js/okra-memory"
+
+const tree = new Tree()
+// ...
 ```
 
 ## Usage
 
 Okra is designed as a thin wrapper around an abstract key/value store interface. The details of how Okra stores the merkle tree nodes in the underlying key/value store are documented in the [Zig implementation repo](https://github.com/canvasxyz/okra).
 
-```ts
-interface KeyValueStore {
-	get(key: Uint8Array): Promise<Uint8Array | null>
-	set(key: Uint8Array, value: Uint8Array): Promise<void>
-	delete(key: Uint8Array): Promise<void>
-	entries(range?: KeyRange): AsyncIterableIterator<[Uint8Array, Uint8Array]>
-}
-
-type KeyRange = {
-	reverse?: boolean
-	lowerBound?: { key: Uint8Array; inclusive: boolean }
-	upperBound?: { key: Uint8Array; inclusive: boolean }
-}
-```
-
-You can either use okra-js with your own implementation of `KeyValueStore`, or one of the three first-party packages:
-
-- [`@canvas-js/okra-memory`](./packages/okra-memory/), backed by an in-memory red/black tree
-- [`@canvas-js/okra-idb`](./packages/okra-idb/), backed by an IndexedDB object store
-- [`@canvas-js/okra-node`](./packages/okra-node/), backed by [LMDB](https://www.symas.com/lmdb) via a native NodeJS bindings
-
 The examples here all use `@canvas-js/okra-memory` for simplicity.
 
-> ⚠️ Never try to directly access or mutate the entries of the underlying key/value store. Only interact with the store through the public `Tree` methods.
-
-### Opening a tree
-
-Import the `Tree` class and pass a `store: KeyValueStore` into `Tree.open`. Upon opening, the tree will write a header entry and the leaf anchor node if they do not exist.
-
-```ts
-import { MemoryTree } from "@canvas-js/okra-memory"
-
-const tree = await MemoryTree.open()
-```
-
-If you want to use Okra with your own key/value store, extend the Tree class and pass your instance of the `KeyValueStore` interface to constructor. If you do this, you must also call the `protected async initialize(): Promise<void>` method immediately after creating the tree. One wasy way to do this is to make the constructor `private` and always use a `async static open()` method to open the tree.
-
-```ts
-import { Tree } from "@canvas-js/okra"
-
-class MyCustomTree extends Tree {
-	public static async open() {
-		const store = new MyCustomKeyValueStore()
-		const tree = new MyCustomTree(store)
-		await tree.initialize()
-		return tree
-	}
-}
-
-const tree = await MyCustomTree.open()
-```
-
-You can override the default internal hash size and target fanout degree by passing an optional second argument `options?: { K?: number, Q?: number }` to the `Tree` constructor, although this is discouraged. If you do, be sure to pass the same values every time you open the tree.
+> ⚠️ Never try to directly access or mutate the entries of the underlying key/value store. Only interact with the store through the `Tree.read(...)` and `Tree.write(...)` transaction interfaces.
 
 ### Getting, setting, and deleting entries
 
 The tree can be used as a normal key/value store with `.get`, `.set`, and `.delete` methods.
 
 ```js
-const encoder = new TextEncoder()
+import { fromString, toString } from "uint8arrays"
 
-await tree.set(encoder.encode("a"), encoder.encode("foo"))
-await tree.set(encoder.encode("b"), encoder.encode("bar"))
-await tree.set(encoder.encode("c"), encoder.encode("baz"))
+import { Tree } from "@canvas-js/okra-memory"
+const tree = new Tree()
 
-await tree.get(encoder.encode("a"))
-// <Buffer 66 6f 6f>
+await tree.write((txn) => {
+	tree.set(fromString("a"), fromString("foo"))
+	tree.set(fromString("b"), fromString("bar"))
+	tree.set(fromString("c"), fromString("baz"))
+})
 
-await tree.delete(encoder.encode("a"))
-await tree.get(encoder.encode("a"))
-// null
+await tree.read((txn) => {
+	const value = txn.get(fromString("a"))
+	console.log(toString(value)) // "foo"
+})
+
+await tree.write((txn) => {
+	tree.delete(toString("a"))
+})
+
+await tree.read((txn) => {
+	const value = tree.get(encoder.encode("a"))
+	console.log(value) // null
+})
 ```
-
-> ⚠️ Concurrent calls to `.set` or `.delete` will cause internal corruption - you must always use `await`, locks, a queue, or some other kind of concurrency control.
-
-Setting or deleting an entry translates into several sets and deletes in the underlying store. As a result, if a underlying `tree.store.set()` or `tree.store.delete()` fails, it will leave the tree in a corrupted state. There are two ways to recover from this:
-
-- If your underlying store supports transactions that can be aborted, implement the `KeyValueStore` interface as a wrapper around a transaction object, not the database itself, and open a new tree over a new transaction for every set of changes you want to make. Then, if an operation fails, abort the transaction.
-- If your underlying store doesn't support transactions and a set or delete fails, the tree can be repaired with a call to `await tree.rebuild()`. However, this can be expensive for large databases.
-
-If atomic and consistent transactions are important to you, consider using the native NodeJS bindings for the [Zig implementation](https://github.com/canvasxyz/okra), which has fully ACID transactions and a multi-reader single-writer concurrency model.
 
 ### Iterating over ranges of entries
 
-You can iterate over ranges of entries with `tree.entries()`.
+You can iterate over ranges of entries with `txn.entries()`.
 
 ```ts
-import { collect } from "@canvas-js/okra"
+await tree.read((txn) => {
+	console.log([...txn.entries()])
+	// [
+	//   [ <Buffer 61>, <Buffer 66 6f 6f> ],
+	//   [ <Buffer 62>, <Buffer 62 61 72> ],
+	//   [ <Buffer 63>, <Buffer 62 61 7a> ]
+	// ]
 
-await collect(tree.entries())
-// [
-//   [ <Buffer 61>, <Buffer 66 6f 6f> ],
-//   [ <Buffer 62>, <Buffer 62 61 72> ],
-//   [ <Buffer 63>, <Buffer 62 61 7a> ]
-// ]
+	console.log([...txn.entries({ reverse: true })])
+	// [
+	//   [ <Buffer 63>, <Buffer 62 61 7a> ],
+	//   [ <Buffer 62>, <Buffer 62 61 72> ],
+	//   [ <Buffer 61>, <Buffer 66 6f 6f> ]
+	// ]
 
-await collect(tree.entries({ reverse: true }))
-// [
-//   [ <Buffer 63>, <Buffer 62 61 7a> ],
-//   [ <Buffer 62>, <Buffer 62 61 72> ],
-//   [ <Buffer 61>, <Buffer 66 6f 6f> ]
-// ]
-
-await collect(
-	tree.entries({
-		lowerBound: { key: encoder.encode("b"), inclusive: true },
-		upperBound: { key: encoder.encode("c"), inclusive: false },
-	})
-)
-// [
-//	 [ <Buffer 62>, <Buffer 62 61 72> ]
-// ]
+	console.log([
+		...txn.entries({
+			lowerBound: { key: fromString("b"), inclusive: true },
+			upperBound: { key: fromString("c"), inclusive: false },
+		}),
+	])
+	// [
+	//	 [ <Buffer 62>, <Buffer 62 61 72> ]
+	// ]
+})
 ```
 
 ### Exposing the internal merkle tree nodes
@@ -160,10 +127,10 @@ await collect(
 You can access the internal merkle tree nodes using the `getRoot`, `getNode`, and `getChildren` methods. These are the methods that must be accessible to other Okra databases, such as over a WebSocket connection. okra-js itself is transport-agnostic.
 
 ```ts
-await tree.getRoot()
+await tree.read((txn) => txn.getRoot())
 // { level: 1, key: null, hash: <Buffer 62 46 b9 40 74 d0 9f eb 64 4b e1 a1 c1 2c 1f 50> }
 
-await tree.getChildren(1, null)
+await tree.read((txn) => txn.getChildren(1, null))
 // [
 //   {
 //     level: 0,
@@ -210,59 +177,56 @@ export interface SyncSource {
 ```ts
 import { sha256 } from "@noble/hashes/sha256"
 import { Tree, sync, collect } from "@canvas-js/okra"
-import { MemoryStore } from "@canvas-js/okra-memory"
+import { Tree } from "@canvas-js/okra-memory"
 
 // create two in-memory trees
-const source = await MemoryTree.open()
-const target = await MemoryTree.open()
+const source = new Tree()
+const target = new Tree()
 
 // initialize them with the same 256 random entries
-for (let i = 0; i < 256; i++) {
-	const key = new Uint8Array([i])
-	await source.set(key, sha256(key))
-	await target.set(key, sha256(key))
+{
+	function init(txn) {
+		for (let i = 0; i < 256; i++) {
+			const key = new Uint8Array([i])
+			txn.set(key, sha256(key))
+		}
+	}
+
+	await source.write(init)
+	await target.write(init)
 }
 
 // delete one entry from source
-await source.delete(new Uint8Array([0x21]))
+await source.write((txn) => txndelete(new Uint8Array([0x21])))
 
 // delete one entry from target
-await target.delete(new Uint8Array([0x44]))
+await target.delete((txn) => txn.delete(new Uint8Array([0x44])))
 
 // set conflicting values for another entry
-const encoder = new TextEncoder()
-await source.set(new Uint8Array([0x04]), encoder.encode("foo"))
-await target.set(new Uint8Array([0x04]), encoder.encode("bar"))
+await source.write((txn) => txn.set(new Uint8Array([0x04]), fromString("foo")))
+await target.write((txn) => txn.set(new Uint8Array([0x04]), fromString("bar")))
 
-await collect(sync(source, target))
-// [
-//   {
-//     key: <Buffer 04>,
-//     source: <Buffer 66 6f 6f>,
-//     target: <Buffer 62 61 72>
-//   },
-//   {
-//     key: <Buffer 21>,
-//     source: null,
-//     target: <Buffer bb 72 08 bc 9b 5d 7c 04 f1 23 6a 82 a0 09 3a 5e 33 f4 04 23 d5 ba 8d 42 66 f7 09 2c 3b a4 3b 62>
-//   },
-//   {
-//     key: <Buffer 44>,
-//     source: <Buffer 3f 39 d5 c3 48 e5 b7 9d 06 e8 42 c1 14 e6 cc 57 15 83 bb f4 4e 4b 0e bf da 1a 01 ec 05 74 5d 43>,
-//     target: null
-//   }
-// ]
+for await (const delta of sync(source, target)) {
+	console.log(delta)
+}
+// {
+//   key: <Buffer 04>,
+//   source: <Buffer 66 6f 6f>,
+//   target: <Buffer 62 61 72>
+// }
+// {
+//   key: <Buffer 21>,
+//   source: null,
+//   target: <Buffer bb 72 08 bc 9b 5d 7c 04 f1 23 6a 82 a0 09 3a 5e 33 f4 04 23 d5 ba 8d 42 66 f7 09 2c 3b a4 3b 62>
+// }
+// {
+//   key: <Buffer 44>,
+//   source: <Buffer 3f 39 d5 c3 48 e5 b7 9d 06 e8 42 c1 14 e6 cc 57 15 83 bb f4 4e 4b 0e bf da 1a 01 ec 05 74 5d 43>,
+//   target: null
+// }
 ```
 
 The `sync` export takes a `SyncSource` and `SyncTarget` and returns an async generator that yields `delta: Delta` objects with `key`, `source`, and `target` properties. `delta.key` is always a `Uint8Array`. `delta.source === null && delta.target !== null` represents an entry that the target has but the source is missing, `delta.source !== null && delta.target === null` represents an entry that the source has but the target is missing, and `delta.source !== null && delta.target !== null` represents an entry for which the source and target have different values. `delta.source` and `delta.target` are never both `null`.
-
-> ⚠️ Syncing **will fail if the source is concurrently modified**.
-
-This means that your implementation of sync transport will need some concept of "sessions" so that okra-js sources can queue pending calls to `.set` and `.delete` when a session is active, and resume handling them when the session ends. This could be done with an async queue like[ `p-queue`](https://github.com/sindresorhus/p-queue) or using locks from e.g. the [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API). In the future, okra-js may enforce locking itself, but for now it is left to the user.
-
-However, thanks to the specific behavior of the sync algorithm, the **target tree _can_ be modified while syncing**. You can safely `await tree.set(...)` and `await tree.delete(...)` inside a `for await (const delta of tree.delta(source)) { ... }` loop.
-
-The Zig implementation and its NodeJS bindings support snapshots and thus can process a read-write transaction with abitrarily many concurrent read-only transactions.
 
 ### Basic syncing patterns
 
@@ -273,7 +237,7 @@ Calling `sync(source, target)` does not automatically modify `target` - it only 
 ```ts
 import { sync } from "@canvas-js/okra"
 
-async function pull(source: SyncSource, target: Tree): Promise<void> {
+async function pull(source: SyncSource, target: SyncTarget): Promise<void> {
 	for await (const delta of sync(source, target)) {
 		if (delta.source === null) {
 			continue
@@ -297,7 +261,7 @@ One way of looking at `pull` is that it implements a grow-only set with an effic
 ```ts
 import { sync } from "@canvas-js/okra"
 
-async function copy(source: SyncSource, target: SyncTree): Promise<void> {
+async function copy(source: SyncSource, target: SyncTarget): Promise<void> {
 	for await (const delta of sync(source, target)) {
 		if (delta.source === null) {
 			await target.delete(delta.key)
@@ -317,7 +281,7 @@ import { sync } from "@canvas-js/okra"
 
 async function merge(
 	source: SyncSource,
-	target: Tree,
+	target: SyncTarget,
 	resolve: (key: Uint8Array, source: Uint8Array, target: Uint8Array) => Uint8Array | Promise<Uint8Array>
 ): Promise<void> {
 	for await (const delta of sync(source, target)) {
@@ -353,29 +317,28 @@ Also useful is the `tree.print()` method, which pretty-prints the merkle tree st
 import { text } from "node:stream/consumers"
 import { sha256 } from "@noble/hashes/sha256"
 
-console.log(await text(tree.print())) // hash size defaults to 4 bytes for readability
-// ── 6246b940 ┬─ af1349b9 |
-//             ├─ 2f26b85f | 61
-//             ├─ 684f1047 | 62
-//             └─ 56cb13c7 | 63
+import { printTree } from "@canvas-js/okra"
+import { Tree } from "@canvas-js/okra-memory"
 
-const bigTree = await Tree.open(new MemoryStore())
-for (let i = 0; i < 256; i++) {
-	const key = new Uint8Array([i])
-	await bigTree.set(key, sha256(key))
-}
+const tree = new Tree()
+await tree.write(async (txn) => {
+	for (let i = 0; i < 256; i++) {
+		const key = new Uint8Array([i])
+		tree.set(key, sha256(key))
+	}
 
-console.log(await text(bigTree.print()))
-// ── 10d7126a ┬─ a74fc67d ┬─ af1349b9 |
-//             │           ├─ 83a4849c | 00
-//             │           ├─ d789a084 | 01
-//             │           ├─ cf069554 | 02
-//             │           ├─ 30c20bbc | 03
-//             │           ├─ ad5563ad | 04
-//             │           ├─ d8a59831 | 05
-//             │           └─ 8c7fe3e1 | 06
-//             ├─ 9bc31466 ┬─ 063bdfac | 07
-// ...
+	console.log(await text(printTree(txn)))
+	// ── 10d7126a ┬─ a74fc67d ┬─ af1349b9 |
+	//             │           ├─ 83a4849c | 00
+	//             │           ├─ d789a084 | 01
+	//             │           ├─ cf069554 | 02
+	//             │           ├─ 30c20bbc | 03
+	//             │           ├─ ad5563ad | 04
+	//             │           ├─ d8a59831 | 05
+	//             │           └─ 8c7fe3e1 | 06
+	//             ├─ 9bc31466 ┬─ 063bdfac | 07
+	// ...
+})
 ```
 
 Entry values are not printed; the rightmost column is the list of keys of the leaf entries in hex.
@@ -393,11 +356,11 @@ The two most important things covered by the tests are 1) correctness of the tre
 ## API
 
 ```ts
-type Key = Uint8Array | null
+export type Key = Uint8Array | null
 
 // value is undefined for level > 0 || key === null,
 // and a Uint8Array for level === 0 && key !== null.
-type Node = {
+export type Node = {
 	level: number
 	key: Key
 	hash: Uint8Array
@@ -405,17 +368,18 @@ type Node = {
 }
 
 // source and target are never both null.
-type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
+export type Delta = { key: Uint8Array; source: Uint8Array | null; target: Uint8Array | null }
 
-interface SyncSource {
+export type Entry = [key: Uint8Array, value: Uint8Array]
+export type Bound<K> = { key: K; inclusive: boolean }
+
+export interface SyncSource {
 	getRoot(): Promise<Node>
 	getNode(level: number, key: Key): Promise<Node | null>
 	getChildren(level: number, key: Key): Promise<Node[]>
 }
 
-type Bound<K> = { key: K; inclusive: boolean }
-
-interface SyncTarget extends SyncSource {
+export interface SyncTarget extends SyncSource {
 	nodes(
 		level: number,
 		lowerBound?: Bound<Key> | null,
@@ -424,45 +388,30 @@ interface SyncTarget extends SyncSource {
 	): AsyncIterableIterator<Node>
 }
 
-interface KeyValueStore {
-	get(key: Uint8Array): Awaitable<Uint8Array | null>
-	set(key: Uint8Array, value: Uint8Array): Awaitable<void>
-	delete(key: Uint8Array): Awaitable<void>
+export interface IReadOnlyTransaction extends SyncSource, SyncTarget {
+	has(key: Uint8Array): boolean
+	get(key: Uint8Array): Uint8Array | null
+	keys(
+		lowerBound?: Bound<Uint8Array> | null,
+		upperBound?: Bound<Uint8Array> | null,
+		options?: { reverse?: boolean }
+	): IterableIterator<Uint8Array>
 	entries(
 		lowerBound?: Bound<Uint8Array> | null,
 		upperBound?: Bound<Uint8Array> | null,
 		options?: { reverse?: boolean }
-	): AsyncIterableIterator<[Uint8Array, Uint8Array]>
+	): IterableIterator<Entry>
 }
 
-declare class Tree implements KeyValueStore, SyncSource, SyncTarget {
-	protected constructor(store: KeyValueStore, options?: { K?: number; Q?: number })
+export interface IReadWriteTransaction extends IReadOnlyTransaction {
+	set(key: Uint8Array, value: Uint8Array): void
+	delete(key: Uint8Array): void
+}
 
-	// closes the underlying store
-	public close(): Promise<void>
-
-	// external key/value interface
-	public get(key: Uint8Array): Promise<Uint8Array | null>
-	public set(key: Uint8Array, value: Uint8Array): Promise<void>
-	public delete(key: Uint8Array): Promise<void>
-	public entries(range?: KeyRange): AsyncIterableIterator<[key: Uint8Array, value: Uint8Array]>
-
-	// access internal merkle tree nodes
-	public getRoot(): Promise<Node>
-	public getNode(level: number, key: Key): Promise<Node | null>
-	public getChildren(level: number, key: Key): Promise<Node[]>
-
-	/**
-	 * Raze and rebuild the merkle tree from the leaves.
-	 * @returns the new root node
-	 */
-	public rebuild(): Promise<void>
-
-	/**
-	 * Pretty-print the tree structure to a utf-8 stream.
-	 * Consume with a TextDecoderStream or async iterable sink.
-	 */
-	public async *print(): AsyncIterableIterator<Uint8Array>
+export interface ITree {
+	metadata: Metadata
+	read<T>(callback: (txn: IReadOnlyTransaction) => Awaitable<T>): Promise<T>
+	write<T>(callback: (txn: IReadWriteTransaction) => Awaitable<T>): Promise<T>
 }
 ```
 

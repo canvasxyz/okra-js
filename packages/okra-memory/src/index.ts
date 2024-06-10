@@ -1,2 +1,2 @@
-export { MemoryStore } from "./store.js"
-export { MemoryTree } from "./tree.js"
+export * from "./Tree.js"
+export * from "./NodeStore.js"

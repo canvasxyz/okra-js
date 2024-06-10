@@ -1,25 +1,24 @@
 import test, { ExecutionContext } from "ava"
 
-import { Builder } from "@canvas-js/okra"
-import { bytesToHex as hex } from "@noble/hashes/utils"
+import { Builder, Metadata, Node, DEFAULT_METADATA } from "@canvas-js/okra"
 
-import { MemoryStore } from "@canvas-js/okra-memory"
+import { NodeStore } from "@canvas-js/okra-memory"
+
 import { iota } from "./utils.js"
+import { fixtures } from "./fixtures.js"
 
-const testIota = (count: number, rootLevel: number, rootHashPrefix: string) => async (t: ExecutionContext) => {
-	const builder = await Builder.open(new MemoryStore(), { K: 16, Q: 4 })
+const testIota = (count: number, root: Node, metadata: Partial<Metadata>) => async (t: ExecutionContext) => {
+	const store = new NodeStore({ ...DEFAULT_METADATA, ...metadata })
+	store.initialize()
+
+	const builder = new Builder(store)
 	for (const [key, value] of iota(count)) {
 		await builder.set(key, value)
 	}
 
-	const root = await builder.finalize()
-	t.is(root.level, rootLevel)
-	t.is(hex(root.hash).slice(0, rootHashPrefix.length), rootHashPrefix)
+	t.deepEqual(await builder.finalize(), root)
 }
 
-test("build iota(0)", testIota(0, 0, "e3b0c44298fc1c149afbf4c8996fb924"))
-// test("build iota(10)", testIota(10, 4, "29f0468d"))
-// test("build iota(100)", testIota(100, 4, "b389c726"))
-// test("build iota(1000)", testIota(1000, 7, "42f378b6"))
-// test("build iota(10000)", testIota(10000, 9, "f3f55398"))
-// test("build iota(100000)", testIota(100000, 8, "f7fe5a93"))
+for (const { count, root, metadata } of fixtures) {
+	test(`build iota(${count})`, testIota(count, root, metadata))
+}

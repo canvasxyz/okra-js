@@ -1,0 +1,11 @@
+{
+	"include": ["src", "lmdb.js", "lmdb.d.ts"],
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"module": "Node16",
+		"moduleResolution": "Node16",
+		"outDir": "lib",
+		"rootDir": "src"
+	},
+	"references": [{ "path": "../okra" }]
+}
