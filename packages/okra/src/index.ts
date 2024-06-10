@@ -10,4 +10,4 @@ export * from "./sync/index.js"
 
 export { printTree } from "./print.js"
 export { formatKey, formatNode } from "./format.js"
-export { equalKeys, compareKeys } from "./utils.js"
+export { equalKeys, compareKeys, hashEntry } from "./utils.js"

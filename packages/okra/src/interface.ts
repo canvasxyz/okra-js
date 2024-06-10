@@ -69,4 +69,5 @@ export interface Tree {
 	metadata: Metadata
 	read<T>(callback: (txn: ReadOnlyTransaction) => Awaitable<T>): Promise<T>
 	write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>, options?: ReadWriteTransactionOptions): Promise<T>
+	close?(): Awaitable<void>
 }
