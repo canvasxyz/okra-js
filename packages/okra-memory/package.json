@@ -1,7 +1,7 @@
 {
 	"name": "@canvas-js/okra-memory",
 	"description": "Temporary Okra database backed by an in-memory red/black tree",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -19,7 +19,7 @@
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"dependencies": {
-		"@canvas-js/okra": "^0.4.0",
+		"@canvas-js/okra": "^0.4.2",
 		"@types/debug": "^4.1.12",
 		"debug": "^4.3.5",
 		"functional-red-black-tree": "^1.0.1",
