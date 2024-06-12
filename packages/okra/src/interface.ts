@@ -70,6 +70,7 @@ export interface ReadOnlyTransaction {
 export interface ReadWriteTransaction extends ReadOnlyTransaction {
 	set(key: Uint8Array, value: Uint8Array): void
 	delete(key: Uint8Array): void
+	rebuild(): Node
 }
 
 export interface Tree {
