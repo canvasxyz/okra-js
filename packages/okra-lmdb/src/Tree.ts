@@ -11,6 +11,8 @@ import {
 	Metadata,
 	DEFAULT_K,
 	DEFAULT_Q,
+	KeyValueNodeStore,
+	Builder,
 } from "@canvas-js/okra"
 
 import * as lmdb from "@canvas-js/okra-lmdb/lmdb"
@@ -24,6 +26,35 @@ export interface TreeOptions extends lmdb.EnvironmentOptions {
 }
 
 export class Tree implements ITree {
+	public static async fromEntries(
+		path: string,
+		init: TreeOptions,
+		entries: AsyncIterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>,
+	): Promise<Tree> {
+		const tree = new Tree(path, init)
+
+		const txn = new lmdb.Transaction(tree.env, false, null)
+		const store = new NodeStore(tree.metadata, txn, null)
+		try {
+			store.initialize()
+
+			for (const key of store.keys(
+				{ key: KeyValueNodeStore.anchorLeafKey, inclusive: false },
+				{ key: KeyValueNodeStore.metadataKey, inclusive: false },
+			)) {
+				store.delete(key)
+			}
+
+			await Builder.fromEntriesAsync(store, entries)
+
+			txn.commit()
+		} catch (err) {
+			txn.abort()
+		}
+
+		return tree
+	}
+
 	public readonly metadata: Metadata
 	public readonly env: lmdb.Environment
 
@@ -32,8 +63,9 @@ export class Tree implements ITree {
 
 	constructor(
 		public readonly path: string,
-		{ K = DEFAULT_K, Q = DEFAULT_Q, mode = Mode.Store, ...options }: TreeOptions = {},
+		init: TreeOptions = {},
 	) {
+		const { K = DEFAULT_K, Q = DEFAULT_Q, mode = Mode.Store, ...options } = init
 		this.metadata = { K, Q, mode }
 		this.env = new lmdb.Environment(path, options)
 
@@ -57,6 +89,29 @@ export class Tree implements ITree {
 			throw new Error("Environment closed")
 		}
 	}
+
+	public async clear() {
+		await this.#queue.add(async () => {
+			const txn = new lmdb.Transaction(this.env, false, null)
+			const store = new NodeStore(this.metadata, txn, null)
+
+			try {
+				for (const key of store.keys(
+					{ key: KeyValueNodeStore.anchorLeafKey, inclusive: false },
+					{ key: KeyValueNodeStore.metadataKey, inclusive: false },
+				)) {
+					store.delete(key)
+				}
+
+				txn.commit()
+			} catch (err) {
+				txn.abort()
+				throw err
+			}
+		})
+	}
+
+	public async build() {}
 
 	public async resize(mapSize: number) {
 		await this.#queue.add(() => this.env.resize(mapSize))

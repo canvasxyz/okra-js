@@ -6,7 +6,11 @@ import * as lmdb from "@canvas-js/okra-lmdb/lmdb"
 
 export class NodeStore extends KeyValueNodeStore {
 	readonly #db: lmdb.Database
-	constructor(public readonly metadata: Metadata, txn: lmdb.Transaction, name: string | null) {
+	constructor(
+		public readonly metadata: Metadata,
+		txn: lmdb.Transaction,
+		name: string | null,
+	) {
 		super()
 		this.#db = new lmdb.Database(txn, name)
 	}
@@ -23,40 +27,41 @@ export class NodeStore extends KeyValueNodeStore {
 		this.#db.delete(key)
 	}
 
+	public *keys(
+		lowerBound: Bound<Uint8Array> | null = null,
+		upperBound: Bound<Uint8Array> | null = null,
+		options: { reverse?: boolean | undefined } = {},
+	): IterableIterator<Uint8Array> {
+		const { reverse = false } = options
+
+		const cursor = new lmdb.Cursor(this.#db)
+		try {
+			if (reverse) {
+				yield* rangeReverse(cursor, lowerBound, upperBound)
+			} else {
+				yield* range(cursor, lowerBound, upperBound)
+			}
+		} finally {
+			cursor.close()
+		}
+	}
+
 	public *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		options: { reverse?: boolean | undefined } = {}
+		options: { reverse?: boolean | undefined } = {},
 	): IterableIterator<Entry> {
 		const { reverse = false } = options
 
 		const cursor = new lmdb.Cursor(this.#db)
 		try {
 			if (reverse) {
-				for (let key = goToEnd(cursor, upperBound); key !== null; key = cursor.goToPrevious()) {
-					if (lowerBound !== null) {
-						const order = compareKeys(key, lowerBound.key)
-						if (order === -1) {
-							return
-						} else if (order === 0 && lowerBound.inclusive === false) {
-							return
-						}
-					}
-
+				for (const key of rangeReverse(cursor, lowerBound, upperBound)) {
 					const value = cursor.getCurrentValue()
 					yield [key, value]
 				}
 			} else {
-				for (let key = goToStart(cursor, lowerBound); key !== null; key = cursor.goToNext()) {
-					if (upperBound !== null) {
-						const order = compareKeys(upperBound.key, key)
-						if (order === -1) {
-							return
-						} else if (order === 0 && upperBound.inclusive === false) {
-							return
-						}
-					}
-
+				for (const key of range(cursor, lowerBound, upperBound)) {
 					const value = cursor.getCurrentValue()
 					yield [key, value]
 				}
@@ -64,6 +69,44 @@ export class NodeStore extends KeyValueNodeStore {
 		} finally {
 			cursor.close()
 		}
+	}
+}
+
+function* rangeReverse(
+	cursor: lmdb.Cursor,
+	lowerBound: Bound<Uint8Array> | null,
+	upperBound: Bound<Uint8Array> | null,
+): IterableIterator<Uint8Array> {
+	for (let key = goToEnd(cursor, upperBound); key !== null; key = cursor.goToPrevious()) {
+		if (lowerBound !== null) {
+			const order = compareKeys(key, lowerBound.key)
+			if (order === -1) {
+				return
+			} else if (order === 0 && lowerBound.inclusive === false) {
+				return
+			}
+		}
+
+		yield key
+	}
+}
+
+function* range(
+	cursor: lmdb.Cursor,
+	lowerBound: Bound<Uint8Array> | null,
+	upperBound: Bound<Uint8Array> | null,
+): IterableIterator<Uint8Array> {
+	for (let key = goToStart(cursor, lowerBound); key !== null; key = cursor.goToNext()) {
+		if (upperBound !== null) {
+			const order = compareKeys(upperBound.key, key)
+			if (order === -1) {
+				return
+			} else if (order === 0 && upperBound.inclusive === false) {
+				return
+			}
+		}
+
+		yield key
 	}
 }
 
