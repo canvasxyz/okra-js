@@ -6,6 +6,27 @@ import { Key, Node } from "./interface.js"
 import { assert, hashEntry } from "./utils.js"
 
 export class Builder {
+	public static fromEntries(store: NodeStore, entries: Iterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>) {
+		const builder = new Builder(store)
+		for (const [key, value] of entries) {
+			builder.set(key, value)
+		}
+
+		builder.finalize()
+	}
+
+	public static async fromEntriesAsync(
+		store: NodeStore,
+		entries: AsyncIterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>,
+	) {
+		const builder = new Builder(store)
+		for await (const [key, value] of entries) {
+			builder.set(key, value)
+		}
+
+		builder.finalize()
+	}
+
 	public readonly K: number
 	public readonly Q: number
 
@@ -18,9 +39,13 @@ export class Builder {
 		this.limit = Number((1n << 32n) / BigInt(this.Q))
 	}
 
-	public set(key: Uint8Array, value: Uint8Array): void {
-		const hash = hashEntry(key, value, this.store.metadata)
-		this.store.setNode({ level: 0, key, hash, value })
+	public set(key: Uint8Array, value: Uint8Array | { hash: Uint8Array }): void {
+		if (value instanceof Uint8Array) {
+			const hash = hashEntry(key, value, this.store.metadata)
+			this.store.setNode({ level: 0, key, hash, value })
+		} else {
+			this.store.setNode({ level: 0, key, hash: value.hash })
+		}
 		this.nodeCount += 1
 	}
 

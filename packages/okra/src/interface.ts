@@ -31,15 +31,6 @@ export interface SyncSource {
 	getChildren(level: number, key: Key): Awaitable<Node[]>
 }
 
-// export interface SyncTarget extends SyncSource {
-// 	nodes(
-// 		level: number,
-// 		lowerBound?: Bound<Key> | null,
-// 		upperBound?: Bound<Key> | null,
-// 		options?: { reverse?: boolean },
-// 	): IterableIterator<Node>
-// }
-
 export interface ReadOnlyTransaction {
 	getRoot(): Node
 	getNode(level: number, key: Key): Node | null
@@ -70,7 +61,6 @@ export interface ReadOnlyTransaction {
 export interface ReadWriteTransaction extends ReadOnlyTransaction {
 	set(key: Uint8Array, value: Uint8Array): void
 	delete(key: Uint8Array): void
-	rebuild(): Node
 }
 
 export interface Tree {
@@ -78,5 +68,7 @@ export interface Tree {
 
 	read<T>(callback: (txn: ReadOnlyTransaction) => Awaitable<T>): Promise<T>
 	write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T>
-	close?(): Awaitable<void>
+
+	close(): Awaitable<void>
+	clear(): Awaitable<void>
 }

@@ -1,6 +1,5 @@
 import { equals, compare } from "uint8arrays"
 
-// import { sha256 } from "@noble/hashes/sha256"
 import { blake3 } from "@noble/hashes/blake3"
 
 import type { Key, Metadata, Node } from "./interface.js"

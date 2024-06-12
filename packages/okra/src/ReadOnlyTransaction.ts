@@ -10,7 +10,7 @@ export class ReadOnlyTransactionImpl implements ReadOnlyTransaction {
 	public readonly K: number
 	public readonly Q: number
 
-	constructor(protected readonly store: NodeStore) {
+	constructor(public readonly store: NodeStore) {
 		this.K = store.metadata.K
 		this.Q = store.metadata.Q
 		this.limit = Number((1n << 32n) / BigInt(this.Q))

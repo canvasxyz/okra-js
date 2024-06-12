@@ -1,12 +1,10 @@
-// import { sha256 } from "@noble/hashes/sha256"
 import { blake3 } from "@noble/hashes/blake3"
 import { equals } from "uint8arrays"
 
 import { Key, Node, Mode, ReadWriteTransaction } from "./interface.js"
+import { NodeStore } from "./NodeStore.js"
 import { ReadOnlyTransactionImpl } from "./ReadOnlyTransaction.js"
 import { hashEntry, compareKeys } from "./utils.js"
-import { NodeStore } from "./NodeStore.js"
-import { Builder } from "./Builder.js"
 
 export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements ReadWriteTransaction {
 	constructor(store: NodeStore) {
@@ -171,26 +169,5 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 		const result = hash.digest()
 		this.log("        %h", result)
 		return result
-	}
-
-	/**
-	 * Raze and rebuild the merkle tree from the leaves.
-	 * @returns the new root node
-	 */
-	public rebuild(): Node {
-		for (let level = 1; level < 0xff; level++) {
-			let count = 0
-			for (const node of this.nodes(level, null, null, { reverse: true })) {
-				count++
-				this.store.deleteNode(level, node.key)
-			}
-
-			if (count === 0) {
-				break
-			}
-		}
-
-		const builder = new Builder(this.store)
-		return builder.finalize()
 	}
 }

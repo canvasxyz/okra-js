@@ -19,7 +19,7 @@ export interface NodeStore {
 		level: number,
 		lowerBound?: Bound<Key> | null,
 		upperBound?: Bound<Key> | null,
-		options?: { reverse?: boolean }
+		options?: { reverse?: boolean },
 	): IterableIterator<Node>
 }
 
@@ -29,8 +29,8 @@ export interface NodeStore {
  * entry-to-node conversion methods.
  */
 export abstract class KeyValueNodeStore implements NodeStore {
-	protected static metadataKey = new Uint8Array([0xff])
-	protected static anchorLeafKey = new Uint8Array([0])
+	public static metadataKey = new Uint8Array([0xff])
+	public static anchorLeafKey = new Uint8Array([0x00])
 
 	public abstract readonly metadata: Metadata
 
@@ -39,10 +39,15 @@ export abstract class KeyValueNodeStore implements NodeStore {
 	protected abstract get(key: Uint8Array): Uint8Array | null
 	protected abstract set(key: Uint8Array, value: Uint8Array): void
 	protected abstract delete(key: Uint8Array): void
+	protected abstract keys(
+		lowerBound?: Bound<Uint8Array> | null,
+		upperBound?: Bound<Uint8Array> | null,
+		options?: { reverse?: boolean },
+	): IterableIterator<Uint8Array>
 	protected abstract entries(
 		lowerBound?: Bound<Uint8Array> | null,
 		upperBound?: Bound<Uint8Array> | null,
-		options?: { reverse?: boolean }
+		options?: { reverse?: boolean },
 	): IterableIterator<Entry>
 
 	public initialize() {
@@ -128,7 +133,7 @@ export abstract class KeyValueNodeStore implements NodeStore {
 		level: number,
 		lowerBound: Bound<Key> | null = null,
 		upperBound: Bound<Key> | null = null,
-		{ reverse = false }: { reverse?: boolean } = {}
+		{ reverse = false }: { reverse?: boolean } = {},
 	): IterableIterator<Node> {
 		const lowerKeyBound = lowerBound
 			? { key: createEntryKey(level, lowerBound.key), inclusive: lowerBound.inclusive }
