@@ -1,7 +1,7 @@
 {
 	"name": "@canvas-js/okra-lmdb",
 	"description": "Native NodeJS bindings for Okra over LMDB",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -29,7 +29,7 @@
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"dependencies": {
-		"@canvas-js/okra": "^0.4.0",
+		"@canvas-js/okra": "^0.4.2",
 		"@noble/hashes": "^1.4.0",
 		"@types/debug": "^4.1.12",
 		"debug": "^4.3.5",
