@@ -6,7 +6,10 @@ import { Metadata, KeyValueNodeStore, Bound, Entry } from "@canvas-js/okra"
 
 export class NodeStore extends KeyValueNodeStore {
 	public snapshot: Tree<Uint8Array, Uint8Array>
-	constructor(public readonly metadata: Metadata, snapshot: Tree<Uint8Array, Uint8Array> = createTree(compare)) {
+	constructor(
+		public readonly metadata: Metadata,
+		snapshot: Tree<Uint8Array, Uint8Array> = createTree(compare),
+	) {
 		super()
 		this.snapshot = snapshot
 	}
@@ -27,18 +30,28 @@ export class NodeStore extends KeyValueNodeStore {
 		this.snapshot = this.snapshot.remove(key)
 	}
 
+	protected *keys(
+		lowerBound: Bound<Uint8Array> | null = null,
+		upperBound: Bound<Uint8Array> | null = null,
+		{ reverse = false }: { reverse?: boolean } = {},
+	): IterableIterator<Uint8Array> {
+		for (const [key] of this.entries(lowerBound, upperBound, { reverse })) {
+			yield key
+		}
+	}
+
 	protected *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		{ reverse = false }: { reverse?: boolean } = {}
+		{ reverse = false }: { reverse?: boolean } = {},
 	): IterableIterator<Entry> {
 		if (reverse === false) {
 			const iter =
 				lowerBound === null
 					? this.snapshot.begin
 					: lowerBound.inclusive
-					? this.snapshot.ge(lowerBound.key)
-					: this.snapshot.gt(lowerBound.key)
+						? this.snapshot.ge(lowerBound.key)
+						: this.snapshot.gt(lowerBound.key)
 
 			while (iter.valid && NodeStore.isBelow(iter.key, upperBound)) {
 				yield [iter.key, iter.value]
@@ -49,8 +62,8 @@ export class NodeStore extends KeyValueNodeStore {
 				upperBound === null
 					? this.snapshot.end
 					: upperBound.inclusive
-					? this.snapshot.le(upperBound.key)
-					: this.snapshot.lt(upperBound.key)
+						? this.snapshot.le(upperBound.key)
+						: this.snapshot.lt(upperBound.key)
 
 			while (iter.valid && NodeStore.isAbove(iter.key, lowerBound)) {
 				yield [iter.key, iter.value]
