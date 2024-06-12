@@ -1,5 +1,5 @@
 import { equals } from "uint8arrays"
-import { Node, Key, SyncSource, SyncTarget, Delta, Bound } from "../interface.js"
+import { Node, Key, SyncSource, ReadOnlyTransaction, Delta, Bound } from "../interface.js"
 
 import { debug } from "../format.js"
 import { assert, equalKeys, equalNodes, compareKeys } from "../utils.js"
@@ -25,7 +25,10 @@ export class Driver {
 	 */
 	private cursor: Bound<Key> | null = null
 
-	constructor(private readonly source: SyncSource, private readonly target: SyncTarget) {}
+	constructor(
+		private readonly source: SyncSource,
+		private readonly target: ReadOnlyTransaction,
+	) {}
 
 	private log(format: string, ...args: any[]) {
 		this.formatter("%s" + format, Driver.indent.repeat(this.depth), ...args)
@@ -59,7 +62,7 @@ export class Driver {
 	async *syncRoots(
 		sourceNode: Node,
 		sourceUpperBound: Bound<Key> | null,
-		targetRoot: Node
+		targetRoot: Node,
 	): AsyncGenerator<Delta, void, undefined> {
 		this.log("syncRoot")
 		this.depth += 1
@@ -122,7 +125,7 @@ export class Driver {
 
 	private async *syncLeaves(
 		sourceNode: Node,
-		sourceUpperBound: Bound<Key> | null
+		sourceUpperBound: Bound<Key> | null,
 	): AsyncGenerator<Delta, void, undefined> {
 		assert(sourceNode.level === 1)
 		this.log("yielding missing entries via explicit leaf iteration")

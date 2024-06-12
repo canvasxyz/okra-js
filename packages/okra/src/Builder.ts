@@ -12,7 +12,7 @@ export class Builder {
 	private readonly limit: number
 	private nodeCount = 1
 
-	constructor(readonly store: NodeStore) {
+	public constructor(public readonly store: NodeStore) {
 		this.K = store.metadata.K
 		this.Q = store.metadata.Q
 		this.limit = Number((1n << 32n) / BigInt(this.Q))

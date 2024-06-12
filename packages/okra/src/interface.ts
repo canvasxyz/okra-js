@@ -31,27 +31,39 @@ export interface SyncSource {
 	getChildren(level: number, key: Key): Awaitable<Node[]>
 }
 
-export interface SyncTarget extends SyncSource {
+// export interface SyncTarget extends SyncSource {
+// 	nodes(
+// 		level: number,
+// 		lowerBound?: Bound<Key> | null,
+// 		upperBound?: Bound<Key> | null,
+// 		options?: { reverse?: boolean },
+// 	): IterableIterator<Node>
+// }
+
+export interface ReadOnlyTransaction {
+	getRoot(): Node
+	getNode(level: number, key: Key): Node | null
+	getChildren(level: number, key: Key): Node[]
 	nodes(
 		level: number,
 		lowerBound?: Bound<Key> | null,
 		upperBound?: Bound<Key> | null,
-		options?: { reverse?: boolean }
+		options?: { reverse?: boolean },
 	): IterableIterator<Node>
-}
 
-export interface ReadOnlyTransaction extends SyncSource, SyncTarget {
 	has(key: Uint8Array): boolean
 	get(key: Uint8Array): Uint8Array | null
+
 	keys(
 		lowerBound?: Bound<Uint8Array> | null,
 		upperBound?: Bound<Uint8Array> | null,
-		options?: { reverse?: boolean }
+		options?: { reverse?: boolean },
 	): IterableIterator<Uint8Array>
+
 	entries(
 		lowerBound?: Bound<Uint8Array> | null,
 		upperBound?: Bound<Uint8Array> | null,
-		options?: { reverse?: boolean }
+		options?: { reverse?: boolean },
 	): IterableIterator<Entry>
 }
 
@@ -60,14 +72,10 @@ export interface ReadWriteTransaction extends ReadOnlyTransaction {
 	delete(key: Uint8Array): void
 }
 
-export interface ReadWriteTransactionOptions {
-	onSetNode?: (node: Node) => void
-	onDeleteNode?: (level: number, key: Key) => void
-}
-
 export interface Tree {
 	metadata: Metadata
+
 	read<T>(callback: (txn: ReadOnlyTransaction) => Awaitable<T>): Promise<T>
-	write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>, options?: ReadWriteTransactionOptions): Promise<T>
+	write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T>
 	close?(): Awaitable<void>
 }

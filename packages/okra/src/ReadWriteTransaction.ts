@@ -2,13 +2,14 @@
 import { blake3 } from "@noble/hashes/blake3"
 import { equals } from "uint8arrays"
 
-import { Key, Node, Mode, ReadWriteTransaction, ReadWriteTransactionOptions } from "./interface.js"
+import { Key, Node, Mode, ReadWriteTransaction } from "./interface.js"
 import { ReadOnlyTransactionImpl } from "./ReadOnlyTransaction.js"
 import { hashEntry, compareKeys } from "./utils.js"
 import { NodeStore } from "./NodeStore.js"
+import { Builder } from "./Builder.js"
 
 export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements ReadWriteTransaction {
-	constructor(store: NodeStore, private readonly options: ReadWriteTransactionOptions = {}) {
+	constructor(store: NodeStore) {
 		super(store)
 	}
 
@@ -45,7 +46,7 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 			this.deleteParents(0, key)
 		}
 
-		this.deleteNode(0, key)
+		this.store.deleteNode(0, key)
 
 		const firstSibling = this.getFirstSibling(node)
 		if (firstSibling.key === null) {
@@ -71,7 +72,7 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 			this.replaceBoundary(newNode)
 		} else {
 			const firstSibling = this.getFirstSibling(newNode)
-			this.setNode(newNode)
+			this.store.setNode(newNode)
 
 			if (this.isBoundary(newNode)) {
 				this.createParents(newNode.level, newNode.key)
@@ -86,7 +87,7 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 	}
 
 	private replaceBoundary(node: Node) {
-		this.setNode(node)
+		this.store.setNode(node)
 
 		if (this.isBoundary(node)) {
 			this.update(node.level + 1, node.key)
@@ -107,7 +108,7 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 		const hash = this.getHash(level, null)
 
 		const anchor = { level, key: null, hash }
-		this.setNode(anchor)
+		this.store.setNode(anchor)
 
 		for (const node of this.store.nodes(level, { key: null, inclusive: false }, null)) {
 			this.updateAnchor(level + 1)
@@ -120,7 +121,7 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 	private deleteParents(level: number, key: Key) {
 		const node = this.getNode(level + 1, key)
 		if (node !== null) {
-			this.deleteNode(level + 1, key)
+			this.store.deleteNode(level + 1, key)
 
 			this.deleteParents(level + 1, key)
 		}
@@ -129,7 +130,7 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 	private createParents(level: number, key: Key) {
 		const hash = this.getHash(level + 1, key)
 		const node: Node = { level: level + 1, key, hash }
-		this.setNode(node)
+		this.store.setNode(node)
 
 		if (this.isBoundary(node)) {
 			this.createParents(level + 1, key)
@@ -172,28 +173,24 @@ export class ReadWriteTransactionImpl extends ReadOnlyTransactionImpl implements
 		return result
 	}
 
-	private deleteNode(level: number, key: Key) {
-		this.store.deleteNode(level, key)
-		this.options.onDeleteNode?.(level, key)
+	/**
+	 * Raze and rebuild the merkle tree from the leaves.
+	 * @returns the new root node
+	 */
+	public rebuild(): Node {
+		for (let level = 1; level < 0xff; level++) {
+			let count = 0
+			for (const node of this.nodes(level, null, null, { reverse: true })) {
+				count++
+				this.store.deleteNode(level, node.key)
+			}
+
+			if (count === 0) {
+				break
+			}
+		}
+
+		const builder = new Builder(this.store)
+		return builder.finalize()
 	}
-
-	private setNode(node: Node) {
-		this.store.setNode(node)
-		this.options.onSetNode?.(node)
-	}
-
-	// /**
-	//  * Raze and rebuild the merkle tree from the leaves.
-	//  * @returns the new root node
-	//  */
-	// public  rebuild(): Promise<Node> {
-	// 	const lowerBound = { key: createEntryKey(1, null), inclusive: true }
-	// 	for  (const [entryKey] of this.store.entries(lowerBound)) {
-	// 		 this.store.delete(entryKey)
-	// 	}
-
-	// 	const builder =  Builder.open(this.store, this.metadata)
-	// 	const root =  builder.finalize()
-	// 	return root
-	// }
 }

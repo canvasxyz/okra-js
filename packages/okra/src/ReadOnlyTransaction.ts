@@ -65,7 +65,7 @@ export class ReadOnlyTransactionImpl implements ReadOnlyTransaction {
 		level: number,
 		lowerBound?: Bound<Key> | null,
 		upperBound?: Bound<Key> | null,
-		options?: { reverse?: boolean }
+		options?: { reverse?: boolean },
 	): IterableIterator<Node> {
 		yield* this.store.nodes(level, lowerBound, upperBound, options)
 	}
@@ -73,7 +73,7 @@ export class ReadOnlyTransactionImpl implements ReadOnlyTransaction {
 	public *keys(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		options: { reverse?: boolean } = {}
+		options: { reverse?: boolean } = {},
 	): IterableIterator<Uint8Array> {
 		for (const node of this.nodes(0, lowerBound ?? { key: null, inclusive: false }, upperBound, options)) {
 			assert(node.key !== null)
@@ -84,7 +84,7 @@ export class ReadOnlyTransactionImpl implements ReadOnlyTransaction {
 	public *entries(
 		lowerBound: Bound<Uint8Array> | null = null,
 		upperBound: Bound<Uint8Array> | null = null,
-		options: { reverse?: boolean } = {}
+		options: { reverse?: boolean } = {},
 	): IterableIterator<Entry> {
 		assert(this.store.metadata.mode === Mode.Store, ".entries() requires Mode.Store")
 		for (const node of this.nodes(0, lowerBound ?? { key: null, inclusive: false }, upperBound, options)) {
