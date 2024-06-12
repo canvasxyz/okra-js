@@ -7,7 +7,6 @@ import {
 	Awaitable,
 	ReadOnlyTransaction,
 	ReadWriteTransaction,
-	ReadWriteTransactionOptions,
 	ReadOnlyTransactionImpl,
 	ReadWriteTransactionImpl,
 	Tree as ITree,
@@ -38,15 +37,12 @@ export class Tree implements ITree {
 		return await callback(new ReadOnlyTransactionImpl(store))
 	}
 
-	public async write<T>(
-		callback: (txn: ReadWriteTransaction) => Awaitable<T>,
-		options: ReadWriteTransactionOptions = {}
-	): Promise<T> {
+	public async write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T> {
 		let result: T | undefined = undefined
 
 		await this.#queue.add(async () => {
 			const store = new NodeStore(this.metadata, this.#tree)
-			result = await callback(new ReadWriteTransactionImpl(store, options))
+			result = await callback(new ReadWriteTransactionImpl(store))
 			this.#tree = store.snapshot
 		})
 
