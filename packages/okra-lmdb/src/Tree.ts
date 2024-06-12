@@ -4,7 +4,6 @@ import {
 	Awaitable,
 	ReadOnlyTransaction,
 	ReadWriteTransaction,
-	ReadWriteTransactionOptions,
 	ReadOnlyTransactionImpl,
 	ReadWriteTransactionImpl,
 	Tree as ITree,
@@ -15,6 +14,7 @@ import {
 } from "@canvas-js/okra"
 
 import * as lmdb from "@canvas-js/okra-lmdb/lmdb"
+
 import { NodeStore } from "./NodeStore.js"
 
 export interface TreeOptions extends lmdb.EnvironmentOptions {
@@ -32,7 +32,7 @@ export class Tree implements ITree {
 
 	constructor(
 		public readonly path: string,
-		{ K = DEFAULT_K, Q = DEFAULT_Q, mode = Mode.Store, ...options }: TreeOptions = {}
+		{ K = DEFAULT_K, Q = DEFAULT_Q, mode = Mode.Store, ...options }: TreeOptions = {},
 	) {
 		this.metadata = { K, Q, mode }
 		this.env = new lmdb.Environment(path, options)
@@ -73,17 +73,14 @@ export class Tree implements ITree {
 		}
 	}
 
-	public async write<T>(
-		callback: (txn: ReadWriteTransaction) => Awaitable<T>,
-		options?: ReadWriteTransactionOptions
-	): Promise<T> {
+	public async write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T> {
 		let result: T | null = null
 		await this.#queue.add(async () => {
 			const txn = new lmdb.Transaction(this.env, false, null)
 			const store = new NodeStore(this.metadata, txn, null)
 
 			try {
-				result = await callback(new ReadWriteTransactionImpl(store, options))
+				result = await callback(new ReadWriteTransactionImpl(store))
 				txn.commit()
 			} catch (err) {
 				txn.abort()

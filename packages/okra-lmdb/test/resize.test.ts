@@ -5,7 +5,10 @@ import { Environment, Transaction, Database } from "@canvas-js/okra-lmdb/lmdb"
 import { getDirectory } from "./utils.js"
 
 test("fill environment", async (t) => {
-	const env = new Environment(getDirectory(t), { mapSize: 4096 * 16 })
+	const mapSize = 4096 * 16
+	const env = new Environment(getDirectory(t), { mapSize })
+	console.log("env.info", env.info())
+	t.is(env.info().mapSize, mapSize)
 
 	const txn = new Transaction(env, false, null)
 	try {
