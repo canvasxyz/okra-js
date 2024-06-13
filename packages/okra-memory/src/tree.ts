@@ -50,8 +50,10 @@ export class Tree implements ITree {
 		this.#tree = store.snapshot
 	}
 
-	public close(): void {
+	public async close(): Promise<void> {
 		this.#open = false
+		this.#queue.clear()
+		await this.#queue.onIdle()
 		this.#tree = createTree(compare)
 	}
 
@@ -79,7 +81,7 @@ export class Tree implements ITree {
 			throw new Error("tree closed")
 		}
 
-		let result: T | undefined = undefined
+		let result: T | undefined
 
 		await this.#queue.add(async () => {
 			const store = new NodeStore(this.metadata, this.#tree)
