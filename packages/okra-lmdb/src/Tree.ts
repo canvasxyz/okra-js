@@ -129,6 +129,7 @@ export class Tree implements ITree {
 	}
 
 	public async write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T> {
+	  let success = false
 		let result: T | null = null
 		await this.#queue.add(async () => {
 			const txn = new lmdb.Transaction(this.env, false, null)
@@ -137,11 +138,16 @@ export class Tree implements ITree {
 			try {
 				result = await callback(new ReadWriteTransactionImpl(store))
 				txn.commit()
+				success = true
 			} catch (err) {
 				txn.abort()
 				throw err
 			}
 		})
+
+		if (!success) {
+		  throw new Error("failed to commit transaction")
+		}
 
 		return result!
 	}
