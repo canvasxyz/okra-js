@@ -1,7 +1,7 @@
 {
 	"name": "@canvas-js/okra-lmdb",
 	"description": "Native NodeJS bindings for Okra over LMDB",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
