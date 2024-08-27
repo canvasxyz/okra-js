@@ -3,6 +3,6 @@ node_modules/
 **/lib/
 **/tsconfig.tsbuildinfo
 
-**/zig-cache/
+**/.zig-cache/
 **/zig-out/
 **/build/
