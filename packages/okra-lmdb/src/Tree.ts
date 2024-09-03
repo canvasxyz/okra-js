@@ -85,8 +85,6 @@ export class Tree implements ITree {
 		if (this.#open) {
 			this.env.close()
 			this.#open = false
-		} else {
-			throw new Error("Environment closed")
 		}
 	}
 
