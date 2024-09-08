@@ -1,10 +1,9 @@
-// import { sha256 } from "@noble/hashes/sha256"
 import { blake3 } from "@noble/hashes/blake3"
 import { compare, equals, toString } from "uint8arrays"
 
 import { Key, Node, Entry, Metadata, Bound, Mode } from "./interface.js"
 import { OKRA_VERSION } from "./constants.js"
-import { debug } from "./format.js"
+import { logger } from "./logger.js"
 import { assert, createEntryKey, parseEntryKey } from "./utils.js"
 
 export interface NodeStore {
@@ -34,7 +33,7 @@ export abstract class KeyValueNodeStore implements NodeStore {
 
 	public abstract readonly metadata: Metadata
 
-	protected readonly log = debug("okra:node-store")
+	protected readonly log = logger("okra:node-store")
 
 	protected abstract get(key: Uint8Array): Uint8Array | null
 	protected abstract set(key: Uint8Array, value: Uint8Array): void

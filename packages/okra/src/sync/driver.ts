@@ -1,14 +1,14 @@
 import { equals } from "uint8arrays"
 import { Node, Key, SyncSource, ReadOnlyTransaction, Delta, Bound } from "../interface.js"
 
-import { debug } from "../format.js"
+import { logger } from "../logger.js"
 import { assert, equalKeys, equalNodes, compareKeys } from "../utils.js"
 
 export class Driver {
 	private static indent = "│ "
 
 	private depth = 0
-	private formatter = debug("okra:sync")
+	private formatter = logger("okra:sync")
 
 	/**
 	 * Syncing progresses from left to right and is tracked by a `cursor: Bound<Key>`

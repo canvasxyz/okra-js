@@ -1,12 +1,11 @@
 import test, { ExecutionContext } from "ava"
+import { randomBytes } from "@noble/hashes/utils"
 
 import { Builder, Metadata, Node, DEFAULT_METADATA, Mode } from "@canvas-js/okra"
-
 import { NodeStore } from "@canvas-js/okra-memory"
 
 import { iota } from "./utils.js"
 import { fixtures } from "./fixtures.js"
-import { randomBytes } from "@noble/hashes/utils"
 
 const testIota = (count: number, root: Node, metadata: Partial<Metadata>) => async (t: ExecutionContext) => {
 	const store = new NodeStore({ ...DEFAULT_METADATA, ...metadata })

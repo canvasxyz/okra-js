@@ -18,6 +18,12 @@ export type Node = {
 	value?: Uint8Array
 }
 
+/**
+  * a Leaf can either be a full value (Uint8Array) or just
+  * the hash of a leaf node ({ hash: Uint8Array })
+  */
+export type Leaf = Uint8Array | { hash: Uint8Array }
+
 export type Awaitable<T> = Promise<T> | T
 
 export type Bound<T = Uint8Array> = { key: T; inclusive: boolean }

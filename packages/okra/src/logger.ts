@@ -1,4 +1,4 @@
-import debug from "debug"
+import debug from "weald"
 import { toString } from "uint8arrays"
 
 import { Key, Node, Bound } from "./interface.js"
@@ -16,4 +16,4 @@ debug.formatters.k = formatKey
 debug.formatters.n = formatNode
 debug.formatters.b = formatBound
 
-export { debug }
+export const logger = debug

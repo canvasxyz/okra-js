@@ -2,11 +2,11 @@
 import { blake3 } from "@noble/hashes/blake3"
 
 import { NodeStore } from "./NodeStore.js"
-import { Key, Node } from "./interface.js"
+import { Key, Node, Leaf } from "./interface.js"
 import { assert, hashEntry } from "./utils.js"
 
 export class Builder {
-	public static fromEntries(store: NodeStore, entries: Iterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>) {
+	public static fromEntries(store: NodeStore, entries: Iterable<[Uint8Array, Leaf]>) {
 		const builder = new Builder(store)
 		for (const [key, value] of entries) {
 			builder.set(key, value)
@@ -17,7 +17,7 @@ export class Builder {
 
 	public static async fromEntriesAsync(
 		store: NodeStore,
-		entries: AsyncIterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>,
+		entries: AsyncIterable<[Uint8Array, Leaf]>,
 	) {
 		const builder = new Builder(store)
 		for await (const [key, value] of entries) {

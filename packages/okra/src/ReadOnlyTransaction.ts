@@ -1,10 +1,10 @@
 import { Node, Mode, ReadOnlyTransaction, Key, Bound, Entry } from "./interface.js"
 import { NodeStore } from "./NodeStore.js"
-import { debug } from "./format.js"
+import { logger } from "./logger.js"
 import { assert, equalKeys } from "./utils.js"
 
 export class ReadOnlyTransactionImpl implements ReadOnlyTransaction {
-	protected readonly log = debug("okra:tree")
+	protected readonly log = logger("okra:tree")
 	protected readonly limit: number
 
 	public readonly K: number

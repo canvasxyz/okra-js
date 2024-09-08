@@ -5,6 +5,10 @@
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
+	"exports": {
+		".": "./lib/index.js",
+		"./logger": "./lib/logger.js"
+	},
 	"files": [
 		"lib/**/*.js",
 		"lib/**/*.d.ts"
@@ -23,9 +27,8 @@
 		"prando": "^6.0.1"
 	},
 	"dependencies": {
-		"@noble/hashes": "^1.4.0",
-		"@types/debug": "^4.1.12",
-		"debug": "^4.3.5",
-		"uint8arrays": "^5.1.0"
+		"@noble/hashes": "^1.5.0",
+		"uint8arrays": "^5.1.0",
+		"weald": "^1.0.2"
 	}
 }
