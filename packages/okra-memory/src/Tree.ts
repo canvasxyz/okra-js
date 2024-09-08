@@ -10,32 +10,41 @@ import {
 	ReadOnlyTransactionImpl,
 	ReadWriteTransactionImpl,
 	Tree as ITree,
+	Leaf,
 	Mode,
 	Metadata,
 	DEFAULT_K,
 	DEFAULT_Q,
 	Builder,
 } from "@canvas-js/okra"
+import { logger } from "@canvas-js/okra/logger"
 
 import { NodeStore } from "./NodeStore.js"
 
 export class Tree implements ITree {
 	public static async fromEntries(
 		init: Partial<Metadata>,
-		entries: AsyncIterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>,
+		entries: AsyncIterable<[Uint8Array, Leaf]>,
 	): Promise<Tree> {
 		const tree = new Tree(init)
 
+		let success = false
 		await tree.#queue.add(async () => {
 			const store = new NodeStore(tree.metadata, tree.#tree)
 			await Builder.fromEntriesAsync(store, entries)
 			tree.#tree = store.snapshot
+			success = true
 		})
+
+		if (!success) {
+		  throw new Error("failed to commit transaction")
+		}
 
 		return tree
 	}
 
 	public readonly metadata: Metadata
+	private readonly log = logger("okra:tree")
 
 	#queue = new PQueue({ concurrency: 1 })
 	#open = true
@@ -52,7 +61,6 @@ export class Tree implements ITree {
 
 	public async close(): Promise<void> {
 		this.#open = false
-		this.#queue.clear()
 		await this.#queue.onIdle()
 		this.#tree = createTree(compare)
 	}
@@ -81,13 +89,19 @@ export class Tree implements ITree {
 			throw new Error("tree closed")
 		}
 
+		let success = false
 		let result: T | undefined
 
 		await this.#queue.add(async () => {
 			const store = new NodeStore(this.metadata, this.#tree)
 			result = await callback(new ReadWriteTransactionImpl(store))
+			success = true
 			this.#tree = store.snapshot
 		})
+
+		if (!success) {
+		  throw new Error("failed to commit transaction")
+		}
 
 		return result!
 	}

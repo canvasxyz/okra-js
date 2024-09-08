@@ -11,9 +11,9 @@ npm i @canvas-js/okra-memory
 ## Usage
 
 ```ts
-import { MemoryTree } from "@canvas-js/okra-memory"
+import { Tree } from "@canvas-js/okra-memory"
 
-const tree = await MemoryTree.open()
+const tree = new Tree()
 
 // ...
 ```
@@ -21,32 +21,21 @@ const tree = await MemoryTree.open()
 ## API
 
 ```ts
-type Key = Uint8Array | null
-type Node = { level: number; key: Key; hash: Uint8Array; value?: Uint8Array }
-type Bound<T> = { key: T; inclusive: boolean }
+import { Metadata, ReadOnlyTransaction, ReadWriteTransaction, Leaf } from "@canvas-js/okra"
 
-declare class MemoryTree {
-	static open(options?: { K?: number; Q?: number }): Promise<MemoryTree>
+export declare class Tree {
+    public static fromEntries(
+      init: Partial<Metadata>,
+      entries: AsyncIterable<[Uint8Array, Leaf]>,
+    ): Promise<Tree>
 
-	public get(key: Uint8Array): Promise<Uint8Array | null>
-	public set(key: Uint8Array, value: Uint8Array): Promise<void>
-	public delete(key: Uint8Array): Promise<void>
+    public readonly metadata: Metadata
 
-	public entries(
-		lowerBound?: Bound<Uint8Array> | null,
-		upperBound?: Bound<Uint8Array> | null,
-		options: { reverse?: boolean }
-	): AsyncGenerator<[Uint8Array, Uint8Array]>
+    public constructor(init?: Partial<Metadata>)
 
-	public getRoot(): Promise<Node>
-	public getNode(level: number, key: Key): Promise<Node | null>
-	public getChildren(level: number, key: Key): Promise<Node[]>
-
-	public nodes(
-		level: number,
-		lowerBound?: Bound<Key> | null,
-		upperBound?: Bound<Key> | null,
-		options: { reverse?: boolean }
-	): AsyncGenerator<Node>
+    public close(): Promise<void>
+    public clear(): void
+    public read<T>(callback: (txn: ReadOnlyTransaction) => Awaitable<T>): Promise<T>
+    public write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T>
 }
 ```
