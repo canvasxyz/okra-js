@@ -14,10 +14,17 @@ import {
 	KeyValueNodeStore,
 	Builder,
 } from "@canvas-js/okra"
+import { logger } from "@canvas-js/okra/logger"
 
 import * as lmdb from "@canvas-js/okra-lmdb/lmdb"
 
 import { NodeStore } from "./NodeStore.js"
+
+/**
+  * a Leaf can either be a full value (Uint8Array) or just
+  * the hash of a leaf node ({ hash: Uint8Array })
+  */
+export type Leaf = Uint8Array | { hash: Uint8Array }
 
 export interface TreeOptions extends lmdb.EnvironmentOptions {
 	K?: number
@@ -29,7 +36,7 @@ export class Tree implements ITree {
 	public static async fromEntries(
 		path: string,
 		init: TreeOptions,
-		entries: AsyncIterable<[Uint8Array, Uint8Array | { hash: Uint8Array }]>,
+		entries: AsyncIterable<[Uint8Array, Leaf]>,
 	): Promise<Tree> {
 		const tree = new Tree(path, init)
 
@@ -57,6 +64,7 @@ export class Tree implements ITree {
 
 	public readonly metadata: Metadata
 	public readonly env: lmdb.Environment
+	private readonly log = logger("okra:tree")
 
 	#open = true
 	#queue = new PQueue({ concurrency: 1 })

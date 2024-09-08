@@ -19,128 +19,44 @@ The following targets are supported:
 
 ## Usage
 
-First open an `Environment`.
-
 ```ts
-import { Environment } from "@canvas-js/okra-node"
+import { Tree } from "@canvas-js/okra-lmdb"
 
-const env = new Environment("./path/to/data/directory")
-try {
-	// ...
-} finally {
-	env.close()
-}
-```
+const tree = new Tree("./path/to/data/directory")
 
-With the environment, you can open transactions, which are either read-write or read-only.
-
-```ts
-await env.read(async (txn) => {
-	/* ... */
+await tree.write((txn) => {
+  txn.set(new Uint8Array([0, 1, 2]), new Uint8Array([4, 5, 6]))
 })
 
-await env.write(async (txn) => {
-	/* ... */
-})
-```
-
-With a transaction, you can open multiple named _databases_ and/or _trees_. A `Database` is a named database in the LMDB key/value store. A `Tree` is a Okra tree that wraps an underlying `Database`. Trees need to be closed before the transaction commits, so they're only accessible within a `Tree.open(txn, name, async (tree) => { ... })` callback. Databases don't have to be closed, so `txn.database(name)` returns a class directly.
-
-Both `Database` and `Tree` implement the `KeyValueStore` interface.
-
-```ts
-const auxillaryDB = txn.database("my-auxillary-db")
-auxillaryDB.set(key1, value1)
-
-await Tree.open(txn, "my-okra-tree", async (tree) => {
-	// ...
-	tree.set(key2, value2)
-	// ...
-	const root = tree.getRoot()
-	// ...
-})
+await tree.close()
 ```
 
 ## API
 
 ```ts
-import { KeyValueStore, Bound, Entry, Node, Key, SyncSource, SyncTarget, Awaitable } from "@canvas-js/okra"
+import { Metadata, ReadOnlyTransaction, ReadWriteTransaction, Leaf } from "@canvas-js/okra"
 
-export interface EnvironmentOptions {
-	mapSize?: number
+export interface TreeOptions extends Partial<Metadata> {
+  mapSize?: number
 	databases?: number
 }
 
-export declare class Environment {
-	public readonly path: string
+export declare class Tree {
+    public static fromEntries(
+      path: string,
+      init: TreeOptions,
+      entries: AsyncIterable<[Uint8Array, Leaf]>,
+    ): Promise<Tree>
 
-	public constructor(path: string, options?: EnvironmentOptions)
+    public readonly metadata: Metadata;
 
-	public close(): void
+    public constructor(path: string, init?: TreeOptions);
 
-	public read<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T>
-	public write<T>(callback: (txn: Transaction) => Awaitable<T>): Promise<T>
-
-	public resize(mapSize: number): void
-
-	public stat(): {
-		pageSize: number
-		depth: number
-		branchPages: number
-		leafPages: number
-		overflowPages: number
-		entries: number
-	}
-
-	public info(): {
-		mapSize: number
-		readers: number
-		maxReaders: number
-	}
-}
-
-export declare class Transaction {
-	public database(name: string | null = null): Database
-}
-
-export declare class Database implements KeyValueStore {
-	public get(key: Uint8Array): Uint8Array | null
-	public set(key: Uint8Array, value: Uint8Array): void
-	public delete(key: Uint8Array): void
-
-	public entries(
-		lowerBound?: Bound<Uint8Array> | null,
-		upperBound?: Bound<Uint8Array> | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<Entry>
-}
-
-export declare class Tree implements KeyValueStore, SyncSource, SyncTarget {
-	public static async open<T>(
-		txn: Transaction,
-		name: string | null,
-		callback: (tree: Tree) => T | Promise<T>
-	): Promise<T>
-
-	public get(key: Uint8Array): Uint8Array | null
-	public set(key: Uint8Array, value: Uint8Array): void
-	public delete(key: Uint8Array): void
-
-	public entries(
-		lowerBound?: Bound<Uint8Array> | null,
-		upperBound?: Bound<Uint8Array> | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<Entry>
-
-	public getRoot(): Node
-	public getNode(level: number, key: Key): Node | null
-	public getChildren(level: number, key: Key): Node[]
-
-	public nodes(
-		level: number,
-		lowerBound?: Bound<Key> | null,
-		upperBound?: Bound<Key> | null,
-		options?: { reverse?: boolean }
-	): AsyncIterableIterator<Node>
+    public close(): Promise<void>
+    public clear(): Promise<void>
+    public build(): Promise<void>
+    public resize(mapSize: number): Promise<void>
+    public read<T>(callback: (txn: ReadOnlyTransaction) => Awaitable<T>): Promise<T>
+    public write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T>
 }
 ```
