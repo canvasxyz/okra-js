@@ -33,6 +33,7 @@ export interface TreeOptions extends lmdb.EnvironmentOptions {
 }
 
 export class Tree implements ITree {
+  public static maxReaders = 126
 	public static async fromEntries(
 		path: string,
 		init: TreeOptions,
@@ -64,10 +65,12 @@ export class Tree implements ITree {
 
 	public readonly metadata: Metadata
 	public readonly env: lmdb.Environment
+
 	private readonly log = logger("okra:tree")
 
 	#open = true
-	#queue = new PQueue({ concurrency: 1 })
+	#writes = new PQueue({ concurrency: 1 })
+	#reads = new PQueue({ concurrency: Tree.maxReaders })
 
 	constructor(
 		public readonly path: string,
@@ -88,8 +91,8 @@ export class Tree implements ITree {
 	}
 
 	public async close() {
-		this.#queue.clear()
-		await this.#queue.onIdle()
+		this.#writes.clear()
+		await this.#writes.onIdle()
 		if (this.#open) {
 			this.env.close()
 			this.#open = false
@@ -97,7 +100,7 @@ export class Tree implements ITree {
 	}
 
 	public async clear() {
-		await this.#queue.add(async () => {
+		await this.#writes.add(async () => {
 			const txn = new lmdb.Transaction(this.env, false, null)
 			const store = new NodeStore(this.metadata, txn, null)
 
@@ -120,24 +123,37 @@ export class Tree implements ITree {
 	public async build() {}
 
 	public async resize(mapSize: number) {
-		await this.#queue.add(() => this.env.resize(mapSize))
+		await this.#writes.add(() => this.env.resize(mapSize))
 	}
 
 	public async read<T>(callback: (txn: ReadOnlyTransaction) => Awaitable<T>): Promise<T> {
-		const txn = new lmdb.Transaction(this.env, true, null)
-		const store = new NodeStore(this.metadata, txn, null)
+		let success = false
+		let result: T | null = null
 
-		try {
-			return await callback(new ReadOnlyTransactionImpl(store))
-		} finally {
-			txn.abort()
+		await this.#reads.add(async () => {
+  		const txn = new lmdb.Transaction(this.env, true, null)
+  		const store = new NodeStore(this.metadata, txn, null)
+
+  		try {
+  			result = await callback(new ReadOnlyTransactionImpl(store))
+        success = true
+  		} finally {
+  			txn.abort()
+  		}
+		})
+
+		if (!success) {
+		  throw new Error("internal transaction error")
 		}
+
+		return result!
 	}
 
 	public async write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T> {
 	  let success = false
 		let result: T | null = null
-		await this.#queue.add(async () => {
+
+		await this.#writes.add(async () => {
 			const txn = new lmdb.Transaction(this.env, false, null)
 			const store = new NodeStore(this.metadata, txn, null)
 
@@ -152,7 +168,7 @@ export class Tree implements ITree {
 		})
 
 		if (!success) {
-		  throw new Error("failed to commit transaction")
+		  throw new Error("internal transaction error")
 		}
 
 		return result!

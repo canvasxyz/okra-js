@@ -1,6 +1,10 @@
 export interface EnvironmentOptions {
 	mapSize?: number
-	databases?: number
+	maxDbs?: number
+	maxReaders?: number
+	readOnly?: boolean
+	writeMap?: boolean
+	mode?: number
 }
 
 export interface EnvironmentInfo {

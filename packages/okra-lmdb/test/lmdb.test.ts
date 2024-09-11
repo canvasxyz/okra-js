@@ -4,8 +4,9 @@ import { fromString } from "uint8arrays"
 import { Environment, Cursor, Transaction, Database } from "@canvas-js/okra-lmdb/lmdb"
 
 import { getDirectory } from "./utils.js"
+import { randomBytes } from "crypto"
 
-test("cursor operations", async (t) => {
+test("cursor operations",  (t) => {
 	const env = new Environment(getDirectory(t), {})
 
 	const txn = new Transaction(env, false, null)

@@ -37,29 +37,93 @@ pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value)
         }
     };
 
-    var map_size: usize = 10_485_760;
-    const map_size_property = try n.createString(env, "mapSize");
-    const map_size_value = try n.getProperty(env, options_arg, map_size_property);
-    const map_size_value_type = try n.typeOf(env, map_size_value);
-    if (map_size_value_type != c.napi_undefined) {
-        map_size = try n.parseUint32(env, map_size_value);
+    var options = lmdb.Environment.Options{ .no_tls = true };
+    // map_size: usize
+    // max_dbs: u32
+    // max_readers: u32
+    // read_only: bool
+    // write_map: bool
+    // no_tls: bool
+    // no_lock: bool
+    // mode: u16
+
+    {
+        const map_size_property = try n.createString(env, "mapSize");
+        const map_size_value = try n.getProperty(env, options_arg, map_size_property);
+        const map_size_value_type = try n.typeOf(env, map_size_value);
+        if (map_size_value_type != c.napi_undefined) {
+            options.map_size = try n.parseUint32(env, map_size_value);
+        }
     }
 
-    const databases_property = try n.createString(env, "databases");
-    const databases_value = try n.getProperty(env, options_arg, databases_property);
-    const databases_value_type = try n.typeOf(env, databases_value);
-    const databases = switch (databases_value_type) {
-        c.napi_undefined => 0,
-        c.napi_null => 0,
-        else => try n.parseUint32(env, databases_value),
-    };
+    {
+        const max_dbs_property = try n.createString(env, "maxDbs");
+        const max_dbs_value = try n.getProperty(env, options_arg, max_dbs_property);
+        const max_dbs_value_type = try n.typeOf(env, max_dbs_value);
+        options.max_dbs = switch (max_dbs_value_type) {
+            c.napi_undefined => 0,
+            c.napi_null => 0,
+            else => try n.parseUint32(env, max_dbs_value),
+        };
+    }
+
+    {
+        const max_readers_property = try n.createString(env, "maxReaders");
+        const max_readers_value = try n.getProperty(env, options_arg, max_readers_property);
+        const max_readers_value_type = try n.typeOf(env, max_readers_value);
+        if (max_readers_value_type != c.napi_undefined) {
+            options.max_readers = try n.parseUint32(env, max_readers_value);
+        }
+    }
+
+    {
+        const read_only_property = try n.createString(env, "readOnly");
+        const read_only_value = try n.getProperty(env, options_arg, read_only_property);
+        const read_only_value_type = try n.typeOf(env, read_only_value);
+        if (read_only_value_type != c.napi_undefined) {
+            options.read_only = try n.parseBoolean(env, read_only_value);
+        }
+    }
+
+    {
+        const write_map_property = try n.createString(env, "writeMap");
+        const write_map_value = try n.getProperty(env, options_arg, write_map_property);
+        const write_map_value_type = try n.typeOf(env, write_map_value);
+        if (write_map_value_type != c.napi_undefined) {
+            options.write_map = try n.parseBoolean(env, write_map_value);
+        }
+    }
+
+    // {
+    //     const no_tls_property = try n.createString(env, "noTls");
+    //     const no_tls_value = try n.getProperty(env, options_arg, no_tls_property);
+    //     const no_tls_value_type = try n.typeOf(env, no_tls_value);
+    //     if (no_tls_value_type != c.napi_undefined) {
+    //         options.no_tls = try n.parseBoolean(env, no_tls_value);
+    //     }
+    // }
+
+    // {
+    //     const no_lock_property = try n.createString(env, "noLock");
+    //     const no_lock_value = try n.getProperty(env, options_arg, no_lock_property);
+    //     const no_lock_value_type = try n.typeOf(env, no_lock_value);
+    //     if (no_lock_value_type != c.napi_undefined) {
+    //         options.no_lock = try n.parseBoolean(env, no_lock_value);
+    //     }
+    // }
+
+    {
+        const mode_property = try n.createString(env, "mode");
+        const mode_value = try n.getProperty(env, options_arg, mode_property);
+        const mode_value_type = try n.typeOf(env, mode_value);
+        if (mode_value_type != c.napi_undefined) {
+            const mode = try n.parseUint32(env, mode_value);
+            options.mode = @truncate(mode);
+        }
+    }
 
     const env_ptr = try allocator.create(lmdb.Environment);
-    env_ptr.* = try lmdb.Environment.init(path, .{
-        .map_size = map_size,
-        .max_dbs = databases,
-        .no_tls = true,
-    });
+    env_ptr.* = try lmdb.Environment.init(path, options);
 
     try n.wrap(lmdb.Environment, env, this, env_ptr, destroy, &TypeTag);
 
