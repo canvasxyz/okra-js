@@ -32,8 +32,16 @@ export interface TreeOptions extends lmdb.EnvironmentOptions {
 	mode?: Mode
 }
 
+const defaultEnvironmentOptions = {
+  mapSize: 10 * 1024 * 1024,
+  maxDbs: 0,
+  maxReaders: 126,
+  readOnly: false,
+  writeMap: false,
+  mode: 0o664,
+}
+
 export class Tree implements ITree {
-  public static maxReaders = 126
 	public static async fromEntries(
 		path: string,
 		init: TreeOptions,
@@ -69,8 +77,8 @@ export class Tree implements ITree {
 	private readonly log = logger("okra:tree")
 
 	#open = true
-	#writes = new PQueue({ concurrency: 1 })
-	#reads = new PQueue({ concurrency: Tree.maxReaders })
+	#writes: PQueue
+	#reads: PQueue
 
 	constructor(
 		public readonly path: string,
@@ -78,6 +86,11 @@ export class Tree implements ITree {
 	) {
 		const { K = DEFAULT_K, Q = DEFAULT_Q, mode = Mode.Store, ...options } = init
 		this.metadata = { K, Q, mode }
+
+		const maxReaders = options.maxReaders ?? defaultEnvironmentOptions.maxReaders
+		this.#reads = new PQueue({ concurrency: maxReaders })
+		this.#writes = new PQueue({ concurrency: 1 })
+
 		this.env = new lmdb.Environment(path, options)
 
 		const txn = new lmdb.Transaction(this.env, false, null)
