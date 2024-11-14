@@ -28,6 +28,7 @@ export interface NodeStore {
  * entry-to-node conversion methods.
  */
 export abstract class KeyValueNodeStore implements NodeStore {
+	public static magic = new TextEncoder().encode("okra")
 	public static metadataKey = new Uint8Array([0xff])
 	public static anchorLeafKey = new Uint8Array([0x00])
 
@@ -50,40 +51,53 @@ export abstract class KeyValueNodeStore implements NodeStore {
 	): IterableIterator<Entry>
 
 	public initialize() {
-		const metadata = this.getMetadata()
-		if (metadata === null) {
+		const metadataValue = this.get(KeyValueNodeStore.metadataKey)
+
+		if (metadataValue === null) {
 			this.setMetadata(this.metadata)
 			this.setNode({ level: 0, key: null, hash: this.getLeafAnchorHash() })
-		} else {
-			assert(metadata.K === this.metadata.K, "metadata.K conflict")
-			assert(metadata.Q === this.metadata.Q, "metadata.Q conflict")
-			assert(metadata.mode === this.metadata.mode, "metadata.mode conflict")
-		}
-	}
-
-	private setMetadata(metadata: Metadata) {
-		const valueBuffer = new ArrayBuffer(10)
-		const valueView = new DataView(valueBuffer, 0, 10)
-		const value = new Uint8Array(valueBuffer, 0, 10)
-		new TextEncoder().encodeInto("okra", value)
-		value[4] = OKRA_VERSION
-		value[5] = metadata.K
-		valueView.setUint32(6, metadata.Q)
-		this.set(KeyValueNodeStore.metadataKey, value)
-	}
-
-	private getMetadata(): Metadata | null {
-		const metadataValue = this.get(KeyValueNodeStore.metadataKey)
-		if (metadataValue === null) {
-			return null
+			return
 		}
 
-		assert(metadataValue.length === 10, "invalid metadata entry")
+		assert(metadataValue.byteLength >= 10, "invalid metadata entry")
+
+		const magic = metadataValue.subarray(0, 4)
+		assert(equals(magic, KeyValueNodeStore.magic), "invalid metadata entry")
+
+		const version = metadataValue[4]
+		assert(version === OKRA_VERSION, "invalid okra version", { expected: OKRA_VERSION, actual: version })
 
 		const view = new DataView(metadataValue.buffer, metadataValue.byteOffset, metadataValue.byteLength)
 		const K = metadataValue[5]
 		const Q = view.getUint32(6)
-		return { K, Q, mode: Mode.Store }
+
+		assert(K === this.metadata.K, "metadata.K conflict")
+		assert(Q === this.metadata.Q, "metadata.Q conflict")
+
+		// Due to a bug in a previous version of okra-js,
+		// we have to handle the case where a v2 mode is
+		// provided but metadataValue.byteLength is 10.
+		if (metadataValue.byteLength === 10) {
+			this.setMetadata(this.metadata)
+			return
+		}
+
+		assert(metadataValue.byteLength === 11, "invalid metadata entry")
+		const mode = metadataValue[10]
+		assert(mode === Mode.Index || mode === Mode.Store, "invalid metadata entry")
+		assert(mode === this.metadata.mode, "metadata.mode conflict")
+	}
+
+	private setMetadata(metadata: Metadata) {
+		const buffer = new ArrayBuffer(11)
+		const view = new DataView(buffer, 0, 11)
+		const data = new Uint8Array(buffer, 0, 11)
+		data.set(KeyValueNodeStore.magic)
+		data[4] = OKRA_VERSION
+		data[5] = metadata.K
+		view.setUint32(6, metadata.Q)
+		data[10] = metadata.mode
+		this.set(KeyValueNodeStore.metadataKey, data)
 	}
 
 	/**

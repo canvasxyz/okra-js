@@ -21,9 +21,9 @@ import * as lmdb from "@canvas-js/okra-lmdb/lmdb"
 import { NodeStore } from "./NodeStore.js"
 
 /**
-  * a Leaf can either be a full value (Uint8Array) or just
-  * the hash of a leaf node ({ hash: Uint8Array })
-  */
+ * a Leaf can either be a full value (Uint8Array) or just
+ * the hash of a leaf node ({ hash: Uint8Array })
+ */
 export type Leaf = Uint8Array | { hash: Uint8Array }
 
 export interface TreeOptions extends lmdb.EnvironmentOptions {
@@ -33,12 +33,12 @@ export interface TreeOptions extends lmdb.EnvironmentOptions {
 }
 
 const defaultEnvironmentOptions = {
-  mapSize: 10 * 1024 * 1024,
-  maxDbs: 0,
-  maxReaders: 126,
-  readOnly: false,
-  writeMap: false,
-  mode: 0o664,
+	mapSize: 10 * 1024 * 1024,
+	maxDbs: 0,
+	maxReaders: 126,
+	readOnly: false,
+	writeMap: false,
+	mode: 0o664,
 }
 
 export class Tree implements ITree {
@@ -66,6 +66,7 @@ export class Tree implements ITree {
 			txn.commit()
 		} catch (err) {
 			txn.abort()
+			throw err
 		}
 
 		return tree
@@ -100,6 +101,7 @@ export class Tree implements ITree {
 			txn.commit()
 		} catch (err) {
 			txn.abort()
+			throw err
 		}
 	}
 
@@ -144,26 +146,26 @@ export class Tree implements ITree {
 		let result: T | null = null
 
 		await this.#reads.add(async () => {
-  		const txn = new lmdb.Transaction(this.env, true, null)
-  		const store = new NodeStore(this.metadata, txn, null)
+			const txn = new lmdb.Transaction(this.env, true, null)
+			const store = new NodeStore(this.metadata, txn, null)
 
-  		try {
-  			result = await callback(new ReadOnlyTransactionImpl(store))
-        success = true
-  		} finally {
-  			txn.abort()
-  		}
+			try {
+				result = await callback(new ReadOnlyTransactionImpl(store))
+				success = true
+			} finally {
+				txn.abort()
+			}
 		})
 
 		if (!success) {
-		  throw new Error("internal transaction error")
+			throw new Error("internal transaction error")
 		}
 
 		return result!
 	}
 
 	public async write<T>(callback: (txn: ReadWriteTransaction) => Awaitable<T>): Promise<T> {
-	  let success = false
+		let success = false
 		let result: T | null = null
 
 		await this.#writes.add(async () => {
@@ -181,7 +183,7 @@ export class Tree implements ITree {
 		})
 
 		if (!success) {
-		  throw new Error("internal transaction error")
+			throw new Error("internal transaction error")
 		}
 
 		return result!
