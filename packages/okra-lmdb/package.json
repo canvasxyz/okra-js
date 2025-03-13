@@ -31,7 +31,7 @@
 	"dependencies": {
 		"@canvas-js/okra": "^0.4.6",
 		"detect-libc": "^2.0.3",
-		"p-queue": "^8.0.1",
+		"p-queue": "^8.1.0",
 		"uint8arrays": "^5.1.0"
 	},
 	"devDependencies": {
