@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@canvas-js/okra':
+        specifier: workspace:*
+        version: link:packages/okra
       '@canvas-js/okra-lmdb':
         specifier: workspace:*
         version: link:packages/okra-lmdb
