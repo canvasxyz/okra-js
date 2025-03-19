@@ -10,7 +10,7 @@
 		"dev": "tsc --build --watch",
 		"build": "tsc --build",
 		"clean": "tsc --build --clean",
-		"test": "npm run test --workspaces"
+		"test": "npm run test --workspaces --if-present"
 	},
 	"repository": {
 		"type": "git",

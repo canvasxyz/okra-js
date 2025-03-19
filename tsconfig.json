@@ -2,7 +2,7 @@
 	"files": [],
 	"references": [
 		{ "path": "./packages/okra" },
-		{ "path": "./packages/okra/test" },
+		{ "path": "./packages/test" },
 		{ "path": "./packages/okra-lmdb" },
 		{ "path": "./packages/okra-lmdb/test" },
 		{ "path": "./packages/okra-memory" },
