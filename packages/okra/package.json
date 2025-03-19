@@ -27,6 +27,7 @@
 		"prando": "^6.0.1"
 	},
 	"dependencies": {
+		"@canvas-js/utils": "^1.0.0",
 		"@noble/hashes": "^1.7.1",
 		"uint8arrays": "^5.1.0",
 		"weald": "^1.0.4"

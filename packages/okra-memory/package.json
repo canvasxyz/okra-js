@@ -20,6 +20,7 @@
 	"license": "MIT",
 	"dependencies": {
 		"@canvas-js/okra": "^0.4.6",
+		"@canvas-js/utils": "^1.0.0",
 		"functional-red-black-tree": "^1.0.1",
 		"p-queue": "^8.1.0",
 		"uint8arrays": "^5.1.0"

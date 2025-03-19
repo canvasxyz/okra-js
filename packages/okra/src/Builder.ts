@@ -1,8 +1,9 @@
 import { blake3 } from "@noble/hashes/blake3"
+import { assert } from "@canvas-js/utils"
 
 import { NodeStore } from "./NodeStore.js"
 import { Key, Node, Leaf } from "./interface.js"
-import { assert, hashEntry } from "./utils.js"
+import { hashEntry } from "./utils.js"
 
 export class Builder {
 	public static fromEntries(store: NodeStore, entries: Iterable<[Uint8Array, Leaf]>) {
@@ -14,10 +15,7 @@ export class Builder {
 		builder.finalize()
 	}
 
-	public static async fromEntriesAsync(
-		store: NodeStore,
-		entries: AsyncIterable<[Uint8Array, Leaf]>,
-	) {
+	public static async fromEntriesAsync(store: NodeStore, entries: AsyncIterable<[Uint8Array, Leaf]>) {
 		const builder = new Builder(store)
 		for await (const [key, value] of entries) {
 			builder.set(key, value)

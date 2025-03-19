@@ -1,10 +1,11 @@
-import { blake3 } from "@noble/hashes/blake3"
 import { compare, equals, toString } from "uint8arrays"
+import { blake3 } from "@noble/hashes/blake3"
+import { assert } from "@canvas-js/utils"
 
 import { Key, Node, Entry, Metadata, Bound, Mode } from "./interface.js"
 import { OKRA_VERSION } from "./constants.js"
 import { logger } from "./logger.js"
-import { assert, createEntryKey, parseEntryKey } from "./utils.js"
+import { createEntryKey, parseEntryKey } from "./utils.js"
 
 export interface NodeStore {
 	metadata: Metadata

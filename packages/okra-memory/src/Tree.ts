@@ -3,8 +3,8 @@ import { compare } from "uint8arrays"
 
 import createTree from "functional-red-black-tree"
 
+import { Awaitable } from "@canvas-js/utils"
 import {
-	Awaitable,
 	ReadOnlyTransaction,
 	ReadWriteTransaction,
 	ReadOnlyTransactionImpl,
@@ -22,10 +22,7 @@ import { logger } from "@canvas-js/okra/logger"
 import { NodeStore } from "./NodeStore.js"
 
 export class Tree implements ITree {
-	public static async fromEntries(
-		init: Partial<Metadata>,
-		entries: AsyncIterable<[Uint8Array, Leaf]>,
-	): Promise<Tree> {
+	public static async fromEntries(init: Partial<Metadata>, entries: AsyncIterable<[Uint8Array, Leaf]>): Promise<Tree> {
 		const tree = new Tree(init)
 
 		let success = false
@@ -37,7 +34,7 @@ export class Tree implements ITree {
 		})
 
 		if (!success) {
-		  throw new Error("failed to commit transaction")
+			throw new Error("failed to commit transaction")
 		}
 
 		return tree
@@ -100,7 +97,7 @@ export class Tree implements ITree {
 		})
 
 		if (!success) {
-		  throw new Error("failed to commit transaction")
+			throw new Error("failed to commit transaction")
 		}
 
 		return result!

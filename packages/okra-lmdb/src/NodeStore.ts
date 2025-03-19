@@ -1,6 +1,6 @@
 import { equals } from "uint8arrays"
 
-import { KeyValueNodeStore, Bound, Entry, compareKeys, Metadata } from "@canvas-js/okra"
+import { KeyValueNodeStore, Bound, Entry, Metadata, compareKeys } from "@canvas-js/okra"
 
 import * as lmdb from "@canvas-js/okra-lmdb/lmdb"
 

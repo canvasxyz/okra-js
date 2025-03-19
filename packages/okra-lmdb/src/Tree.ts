@@ -1,7 +1,7 @@
 import PQueue from "p-queue"
 
+import { Awaitable } from "@canvas-js/utils"
 import {
-	Awaitable,
 	ReadOnlyTransaction,
 	ReadWriteTransaction,
 	ReadOnlyTransactionImpl,

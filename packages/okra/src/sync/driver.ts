@@ -1,8 +1,9 @@
 import { equals } from "uint8arrays"
-import { Node, Key, SyncSource, ReadOnlyTransaction, Delta, Bound } from "../interface.js"
+import { assert } from "@canvas-js/utils"
 
+import { Node, Key, SyncSource, ReadOnlyTransaction, Delta, Bound } from "../interface.js"
 import { logger } from "../logger.js"
-import { assert, equalKeys, equalNodes, compareKeys } from "../utils.js"
+import { equalKeys, equalNodes, compareKeys } from "../utils.js"
 
 export class Driver {
 	private static indent = "│ "

@@ -1,7 +1,9 @@
+import { assert } from "@canvas-js/utils"
+
 import { Node, Mode, ReadOnlyTransaction, Key, Bound, Entry } from "./interface.js"
 import { NodeStore } from "./NodeStore.js"
 import { logger } from "./logger.js"
-import { assert, equalKeys } from "./utils.js"
+import { equalKeys } from "./utils.js"
 
 export class ReadOnlyTransactionImpl implements ReadOnlyTransaction {
 	protected readonly log = logger("okra:tree")

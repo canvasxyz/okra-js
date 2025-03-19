@@ -1,6 +1,6 @@
 import { equals, compare } from "uint8arrays"
-
 import { blake3 } from "@noble/hashes/blake3"
+import { assert } from "@canvas-js/utils"
 
 import type { Key, Metadata, Node } from "./interface.js"
 import { DEFAULT_METADATA } from "./constants.js"
@@ -24,16 +24,6 @@ export function createEntryKey(level: number, key: Key): Uint8Array {
 	entryKey[0] = level
 	entryKey.set(key, 1)
 	return entryKey
-}
-
-export function assert(condition: unknown, message?: string, ...args: any[]): asserts condition {
-	if (!condition) {
-		if (args && args.length > 0) {
-			console.error(...args)
-		}
-
-		throw new Error(message ?? "Internal error")
-	}
 }
 
 export function compareKeys(a: Key, b: Key): number {
