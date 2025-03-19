@@ -10,7 +10,7 @@
 		"dev": "tsc --build --watch",
 		"build": "tsc --build",
 		"clean": "tsc --build --clean",
-		"test": "npm run test --workspaces",
+		"test": "pnpm -r test",
 		"prepublishOnly": "echo 'Do not use npm publish! Use pnpm publish instead.' && exit 1"
 	},
 	"repository": {
