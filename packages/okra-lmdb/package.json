@@ -29,7 +29,7 @@
 	"author": "Joel Gustafson",
 	"license": "MIT",
 	"dependencies": {
-		"@canvas-js/okra": "0.4.7",
+		"@canvas-js/okra": "^0.4.7",
 		"@canvas-js/utils": "^1.0.0",
 		"detect-libc": "^2.0.3",
 		"p-queue": "^8.1.0",
