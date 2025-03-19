@@ -10,13 +10,15 @@
 		"dev": "tsc --build --watch",
 		"build": "tsc --build",
 		"clean": "tsc --build --clean",
-		"test": "npm run test --workspaces"
+		"test": "npm run test --workspaces",
+		"prepublishOnly": "echo 'Do not use npm publish! Use pnpm publish instead.' && exit 1"
 	},
 	"repository": {
 		"type": "git",
 		"url": "git://github.com/canvasxyz/okra-js.git"
 	},
 	"dependencies": {
+		"@canvas-js/okra": "workspace:*",
 		"@canvas-js/okra-lmdb": "workspace:*",
 		"@canvas-js/okra-memory": "workspace:*"
 	},

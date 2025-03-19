@@ -46,6 +46,12 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
     devDependencies:
+      '@canvas-js/okra-lmdb':
+        specifier: workspace:*
+        version: link:../okra-lmdb
+      '@canvas-js/okra-memory':
+        specifier: workspace:*
+        version: link:../okra-memory
       nanoid:
         specifier: ^5.1.3
         version: 5.1.5
