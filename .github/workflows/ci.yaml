@@ -15,11 +15,19 @@ jobs:
         with:
           node-version: 22.x
 
+      - name: Install Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
       - name: Install dependencies
         run: npm i
 
       - name: Build
         run: npm run build
+
+      - name: Build Zig
+        run: npm run build -w packages/okra-lmdb
 
       - name: Run workspace tests
         run: npm run test
