@@ -4,8 +4,8 @@ const allocator = std.heap.c_allocator;
 const lmdb = @import("lmdb");
 const okra = @import("okra");
 
-const c = @import("./c.zig");
-const n = @import("./n.zig");
+const c = @import("c.zig");
+const n = @import("n.zig");
 
 pub fn openDB(env: c.napi_env, name_value: c.napi_value, txn_ptr: *lmdb.Transaction) !lmdb.Database {
     switch (try n.typeOf(env, name_value)) {

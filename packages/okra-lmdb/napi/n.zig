@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("./c.zig");
+const c = @import("c.zig");
 
 pub fn Callback(comptime argc: usize) type {
     return *const fn (env: c.napi_env, this: c.napi_value, args: *const [argc]c.napi_value) anyerror!c.napi_value;
