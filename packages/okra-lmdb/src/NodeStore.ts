@@ -34,15 +34,11 @@ export class NodeStore extends KeyValueNodeStore {
 	): IterableIterator<Uint8Array> {
 		const { reverse = false } = options
 
-		const cursor = new lmdb.Cursor(this.#db)
-		try {
-			if (reverse) {
-				yield* rangeReverse(cursor, lowerBound, upperBound)
-			} else {
-				yield* range(cursor, lowerBound, upperBound)
-			}
-		} finally {
-			cursor.close()
+		using cursor = new lmdb.Cursor(this.#db)
+		if (reverse) {
+			yield* rangeReverse(cursor, lowerBound, upperBound)
+		} else {
+			yield* range(cursor, lowerBound, upperBound)
 		}
 	}
 
@@ -53,21 +49,17 @@ export class NodeStore extends KeyValueNodeStore {
 	): IterableIterator<Entry> {
 		const { reverse = false } = options
 
-		const cursor = new lmdb.Cursor(this.#db)
-		try {
-			if (reverse) {
-				for (const key of rangeReverse(cursor, lowerBound, upperBound)) {
-					const value = cursor.getCurrentValue()
-					yield [key, value]
-				}
-			} else {
-				for (const key of range(cursor, lowerBound, upperBound)) {
-					const value = cursor.getCurrentValue()
-					yield [key, value]
-				}
+		using cursor = new lmdb.Cursor(this.#db)
+		if (reverse) {
+			for (const key of rangeReverse(cursor, lowerBound, upperBound)) {
+				const value = cursor.getCurrentValue()
+				yield [key, value]
 			}
-		} finally {
-			cursor.close()
+		} else {
+			for (const key of range(cursor, lowerBound, upperBound)) {
+				const value = cursor.getCurrentValue()
+				yield [key, value]
+			}
 		}
 	}
 }

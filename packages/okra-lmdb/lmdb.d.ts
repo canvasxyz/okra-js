@@ -1,5 +1,5 @@
 export interface EnvironmentOptions {
-	mapSize?: number
+	map?: number
 	maxDbs?: number
 	maxReaders?: number
 	readOnly?: boolean
@@ -46,6 +46,7 @@ export declare class Database {
 
 export declare class Cursor {
 	constructor(db: Database)
+	[Symbol.dispose](): void
 	close(): void
 	getCurrentEntry(): [Uint8Array, Uint8Array]
 	getCurrentKey(): Uint8Array
