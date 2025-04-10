@@ -38,14 +38,6 @@ pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value)
     };
 
     var options = lmdb.Environment.Options{ .no_tls = true };
-    // map_size: usize
-    // max_dbs: u32
-    // max_readers: u32
-    // read_only: bool
-    // write_map: bool
-    // no_tls: bool
-    // no_lock: bool
-    // mode: u16
 
     {
         const map_size_property = try n.createString(env, "mapSize");
@@ -93,24 +85,6 @@ pub fn create(env: c.napi_env, this: c.napi_value, args: *const [2]c.napi_value)
             options.write_map = try n.parseBoolean(env, write_map_value);
         }
     }
-
-    // {
-    //     const no_tls_property = try n.createString(env, "noTls");
-    //     const no_tls_value = try n.getProperty(env, options_arg, no_tls_property);
-    //     const no_tls_value_type = try n.typeOf(env, no_tls_value);
-    //     if (no_tls_value_type != c.napi_undefined) {
-    //         options.no_tls = try n.parseBoolean(env, no_tls_value);
-    //     }
-    // }
-
-    // {
-    //     const no_lock_property = try n.createString(env, "noLock");
-    //     const no_lock_value = try n.getProperty(env, options_arg, no_lock_property);
-    //     const no_lock_value_type = try n.typeOf(env, no_lock_value);
-    //     if (no_lock_value_type != c.napi_undefined) {
-    //         options.no_lock = try n.parseBoolean(env, no_lock_value);
-    //     }
-    // }
 
     {
         const mode_property = try n.createString(env, "mode");
