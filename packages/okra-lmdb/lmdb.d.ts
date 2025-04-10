@@ -1,5 +1,5 @@
 export interface EnvironmentOptions {
-	map?: number
+	mapSize?: number
 	maxDbs?: number
 	maxReaders?: number
 	readOnly?: boolean
