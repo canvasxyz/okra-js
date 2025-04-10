@@ -38,7 +38,6 @@ const defaultEnvironmentOptions = {
 	maxReaders: 126,
 	readOnly: false,
 	writeMap: false,
-	mode: 0o664,
 }
 
 export class Tree implements ITree {
@@ -85,11 +84,15 @@ export class Tree implements ITree {
 		public readonly path: string,
 		init: TreeOptions = {},
 	) {
-		const { K = DEFAULT_K, Q = DEFAULT_Q, mode = Mode.Store, ...options } = init
+		const {
+			K = DEFAULT_K,
+			Q = DEFAULT_Q,
+			mode = Mode.Store,
+			...options
+		} = Object.assign({ ...defaultEnvironmentOptions }, init)
 		this.metadata = { K, Q, mode }
 
-		const maxReaders = options.maxReaders ?? defaultEnvironmentOptions.maxReaders
-		this.#reads = new PQueue({ concurrency: maxReaders })
+		this.#reads = new PQueue({ concurrency: options.maxReaders })
 		this.#writes = new PQueue({ concurrency: 1 })
 
 		this.env = new lmdb.Environment(path, options)
